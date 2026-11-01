@@ -5,16 +5,21 @@ import { COLOGNE_200_BOY_NAMES } from "@/lib/names";
 import { recordVote, scores } from "@/lib/store";
 import { rankNames } from "@/lib/ranking";
 import type { RankedName } from "@/lib/ranking";
-import type { Alias } from "@/lib/session";
 import {
   sealSession,
   verifySession,
-  getCurrentAlias,
+  getCurrentUid,
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/session";
 import { verifyGoogleIdToken } from "@/lib/google-verify";
-import { aliasForEmail, assertAuthConfigured } from "@/lib/users";
+import {
+  parseApprovedEmails,
+  isApprovedEmail,
+  assertAuthConfigured,
+} from "@/lib/users";
+import { approvedEmails } from "@/lib/env";
+import { createUserStore, displayLabel, findUserById } from "@/lib/user-store";
 import { cookies } from "next/headers";
 
 export interface ActionResult {
@@ -23,7 +28,7 @@ export interface ActionResult {
 }
 
 export type SignInResult =
-  | { ok: true; alias: "A" | "B" }
+  | { ok: true; uid: string; label: string }
   | {
       ok: false;
       reason: "invalid-token" | "not-approved" | "server-config";
@@ -40,9 +45,12 @@ function isName(value: unknown): value is string {
 }
 
 /**
- * Verifies a Google ID token and, for an approved address, sets the
- * signed session cookie (spec 004 FR-002/FR-003/FR-004). Never returns or
- * logs the email (FR-008).
+ * Verifies a Google ID token and, for an approved address, resolves the
+ * persistent internal user record and sets the signed session cookie
+ * (spec 005 FR-001/FR-002/FR-004, contracts.md §1). The email is the
+ * lookup key at sign-in ONLY — never returned, logged, or stored in votes
+ * or sessions (FR-008/FR-012). Denial happens BEFORE any user-store
+ * access: a non-approved account leaves no record (FR-003, research R7).
  */
 export async function signIn(idToken: unknown): Promise<SignInResult> {
   try {
@@ -54,11 +62,11 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
       return { ok: false, reason: verified.reason };
     }
     assertAuthConfigured();
-    const alias = aliasForEmail(verified.email);
-    if (alias === null) {
+    if (!isApprovedEmail(verified.email, parseApprovedEmails(approvedEmails()))) {
       return { ok: false, reason: "not-approved" };
     }
-    const sealed = sealSession({ alias, iat: Date.now() });
+    const record = await createUserStore().resolveUser(verified.email);
+    const sealed = sealSession({ uid: record.id, iat: Date.now() });
     (await cookies()).set(SESSION_COOKIE_NAME, sealed, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -66,9 +74,9 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
       maxAge: SESSION_MAX_AGE_SECONDS,
       path: "/",
     });
-    return { ok: true, alias };
+    return { ok: true, uid: record.id, label: displayLabel(record) };
   } catch (err) {
-    // Missing/malformed secret configuration is an operator error (FR-004):
+    // Missing/malformed secret configuration is an operator error (FR-011):
     // fail the sign-in without leaking details to the client.
     console.error("signIn failed:", err);
     return { ok: false, reason: "server-config" };
@@ -86,8 +94,9 @@ export async function signOut(): Promise<{ ok: true }> {
 
 /**
  * Validates and records one vote; returns error state on failure (FR-012).
- * Spec 004 (T016): the alias is derived from the session cookie — the
- * client can no longer choose the identity (US2, FR-005/FR-009).
+ * The uid is derived from the session cookie — the client can no longer
+ * choose the identity (US2, FR-005). The recorded `user` value is the
+ * opaque internal user id (22-char base64url).
  */
 export async function submitVote(
   winner: unknown,
@@ -100,11 +109,11 @@ export async function submitVote(
     if (winner === loser) {
       return { ok: false, error: "Ein Paar muss aus zwei verschiedenen Namen bestehen." };
     }
-    const alias = await getCurrentAlias();
-    if (alias === null) {
+    const uid = await getCurrentUid();
+    if (uid === null) {
       return { ok: false, error: "Abgelaufen — bitte neu anmelden." };
     }
-    await recordVote({ winner, loser, user: alias as Alias });
+    await recordVote({ winner, loser, user: uid });
     return { ok: true };
   } catch (err) {
     // FR-012: failed submissions must NOT count and must be reported.

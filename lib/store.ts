@@ -15,7 +15,8 @@ const PREFIX = process.env.STORE_KEY_PREFIX ?? "namewahl";
 export interface VoteRecord {
   winner: string;
   loser: string;
-  user: "A" | "B";
+  /** Internal user id (005+) or legacy alias "A"/"B" (pre-005 data). */
+  user: string;
   at: string; // ISO timestamp
 }
 

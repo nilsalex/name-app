@@ -1,7 +1,8 @@
 "use client";
 
-// Vote screen (spec 004 US1): the identity comes from the session — the
-// server component passes the alias as a prop (no more localStorage picker).
+// Vote screen (spec 005 US1): the identity comes from the session — the
+// server component passes the internal user id and the neutral display
+// label as props (no more localStorage picker, no alias).
 // Pick a pair, then tap through name pairs instantly. The next pair is
 // swapped in synchronously from a client-side reserve while the vote
 // dispatches asynchronously (fire-and-forget, bounded retry, at-most-once).
@@ -15,11 +16,10 @@ import { useRouter } from "next/navigation";
 import type { Pair } from "@/lib/pairing";
 import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
 import { createVoteSender } from "@/lib/vote-sender";
-import type { Alias } from "@/lib/session";
 import { submitVote, getScores, signOut } from "@/app/actions";
 import styles from "./page.module.css";
 
-export default function VoteClient({ alias }: { alias: Alias }) {
+export default function VoteClient({ uid, label }: { uid: string; label: string }) {
   const router = useRouter();
   // Displayed pair; null until the first reserve batch is prepared (mount)
   // or while the reserve is exhausted (aria-busy, taps disabled — Q5/V6).
@@ -137,9 +137,9 @@ export default function VoteClient({ alias }: { alias: Alias }) {
       // then dispatch the vote fire-and-forget — presentation never waits.
       // The vote carries exactly the displayed pair (winner = tapped name).
       showNextPair(pair);
-      senderRef.current?.cast({ winner, loser, voter: alias }); // voter unused server-side (session-derived); kept for VoteInput shape
+      senderRef.current?.cast({ winner, loser, voter: uid }); // voter unused server-side (session-derived); kept for VoteInput shape
     },
-    [pair, showNextPair, alias]
+    [pair, showNextPair, uid]
   );
 
   if (!pair) {
@@ -158,7 +158,7 @@ export default function VoteClient({ alias }: { alias: Alias }) {
       >
         Abmelden
       </button>
-      <p className={styles.hint}>Welcher Name gefällt dir besser, Person {alias}?</p>
+      <p className={styles.hint}>Welcher Name gefällt dir besser, {label}?</p>
       <div className={styles.pairButtons}>
         <button className={styles.nameButton} onClick={() => vote(pair[0], pair[1])}>
           {pair[0]}

@@ -1,20 +1,24 @@
-// Vote screen route (spec 004 US1): session gate. The static shell stays
+// Vote screen route (spec 005 US1): session gate. The static shell stays
 // prerendered; the session read happens at request time inside a Suspense
 // boundary (cacheComponents requirement, plan.md Constitution I) and streams
 // in either the vote screen or the login screen.
 import { Suspense } from "react";
 import VoteClient from "./vote-client";
 import LoginClient from "./login-client";
-import { getCurrentAlias } from "@/lib/session";
+import { getCurrentUid } from "@/lib/session";
+import { findUserById, displayLabel } from "@/lib/user-store";
 import { googleClientId } from "@/lib/env";
 import styles from "./page.module.css";
 
 async function VoteGate() {
-  const alias = await getCurrentAlias();
-  if (alias === null) {
+  const uid = await getCurrentUid();
+  if (uid === null) {
     return <LoginClient clientId={googleClientId()} />;
   }
-  return <VoteClient alias={alias} />;
+  // Resolve the neutral display label server-side ("Person N"); a missing
+  // record (deleted while the cookie survives) falls back to bare "Person".
+  const record = await findUserById(uid);
+  return <VoteClient uid={uid} label={record ? displayLabel(record) : "Person"} />;
 }
 
 export default function Home() {

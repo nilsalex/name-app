@@ -32,11 +32,17 @@ const PREFIX = process.env.STORE_KEY_PREFIX ?? "namewahl";
 const USERS_KEY = `${PREFIX}:users`;
 const NEXTNUM_KEY = `${PREFIX}:users:nextnum`;
 
+let sharedClient: Redis | null = null;
+
+/** Shared client so findUserById uses the same connection as the backend. */
+function upstashRedis(): Redis {
+  sharedClient ??= new Redis({ url: upstashUrl(), token: upstashToken() });
+  return sharedClient;
+}
+
 /** Default backend: the Upstash Redis hash + counter (data-model.md). */
 function upstashBackend(): UserStoreBackend {
-  let client: Redis | null = null;
-  const redis = (): Redis =>
-    (client ??= new Redis({ url: upstashUrl(), token: upstashToken() }));
+  const redis = upstashRedis;
   return {
     async get(email) {
       const raw = await redis().hget<string>(USERS_KEY, email);
@@ -59,6 +65,25 @@ export interface UserStore {
    * persists it. Sign-in is the only caller.
    */
   resolveUser(email: string): Promise<UserRecord>;
+}
+
+/**
+ * Looks up a user record by internal id (session gate, T013). Scans the
+ * users hash — fine for the small approved list; returns null when no
+ * record matches (e.g. record deleted while a session cookie survives).
+ */
+export async function findUserById(
+  uid: string
+): Promise<UserRecord | null> {
+  const entries = await upstashRedis().hgetall<Record<string, string>>(USERS_KEY);
+  if (!entries) return null;
+  for (const value of Object.values(entries)) {
+    const record = (
+      typeof value === "string" ? JSON.parse(value) : value
+    ) as UserRecord;
+    if (record.id === uid) return record;
+  }
+  return null;
 }
 
 export function createUserStore(backend?: UserStoreBackend): UserStore {

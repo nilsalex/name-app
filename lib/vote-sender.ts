@@ -10,7 +10,7 @@
 // No module state, no I/O: the send function is injectable so tests run
 // deterministically with fake timers (see tests/unit/vote-sender.test.ts).
 
-export type VoteInput = { winner: string; loser: string; voter: "A" | "B" };
+export type VoteInput = { winner: string; loser: string; voter: string };
 export type VoteStatus = "pending" | "sent" | "failed";
 
 export interface VoteSenderOptions {
