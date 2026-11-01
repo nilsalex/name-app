@@ -69,6 +69,10 @@ describe("displayLabel", () => {
       createdAt: "2026-11-02T10:00:00.000Z",
     };
     assert.equal(displayLabel(record), "Person 3");
-    assert.equal(displayLabel({ ...record, num: undefined }), "Person");
+    // Forward-compat: a legacy record without num renders the bare label.
+    assert.equal(
+      displayLabel({ ...record, num: undefined as unknown as number }),
+      "Person"
+    );
   });
 });
