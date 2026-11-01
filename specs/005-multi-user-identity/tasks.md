@@ -1,17 +1,17 @@
 ---
 
-description: "Task list for feature 004-gmail-login"
+description: "Task list for feature 005-multi-user-identity"
 ---
 
-# Tasks: Gmail Login (004)
+# Tasks: Multi-User Identity (005)
 
-**Input**: Design documents from `/specs/004-gmail-login/`
+**Input**: Design documents from `/specs/005-multi-user-identity/`
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/contracts.md, quickstart.md
 
-**Tests**: Included per constitution Principle III/IV (proportionate, test-first red→green): unit tests for every new pure module, one integration test for the auth-gated `submitVote` path. UI wiring is validated by build + quickstart, not tests.
+**Tests**: Included per constitution Principle III/IV (proportionate, test-first red→green): unit suites for every new/changed pure module, updated integration test for the unauthenticated-submit path. UI wiring validated by build + quickstart.
 
-**Organization**: Tasks are grouped by user story. US1 = login/session (P1), US2 = attribution (P2), US3 = sign-out/access control (P3).
+**Organization**: Tasks are grouped by user story. US1 = login with stable ID (P1), US2 = ID-based attribution + mixed-legacy rendering (P2), US3 = sign-out/access control preserved (P3).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -25,79 +25,78 @@ Single-project Next.js App Router: `app/`, `lib/`, `tests/unit/`, `tests/integra
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Environment contract for the new secrets before any code touches them.
+**Purpose**: Environment/config contract before any code reads it.
 
-- [ ] T001 Create `.env.example` at repository root documenting every required secret with placeholder values and one-line comments: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `GOOGLE_CLIENT_ID`, `APPROVED_USER_A_EMAIL`, `APPROVED_USER_B_EMAIL`, `SESSION_SECRET` (note in comment: ≥ 32 random bytes, `openssl rand -base64 32`); add a header comment "never commit .env.local". Also list the four new auth variables in `specs/004-gmail-login/quickstart.md` Prerequisites are already documented — verify they match this file exactly.
+- [ ] T001 Update `.env.example` at repository root: replace `APPROVED_USER_A_EMAIL`/`APPROVED_USER_B_EMAIL` entries with a single `APPROVED_EMAILS=person.a@gmail.com,person.b@gmail.com` line (comment: "comma-separated approved addresses; append to add a user; order no longer decides identity"); keep `GOOGLE_CLIENT_ID` and `SESSION_SECRET` entries unchanged.
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Pure, server-only auth modules that ALL user stories depend on. No user story work may begin until these are green.
+**Purpose**: New pure modules + changed session payload that ALL user stories depend on. Test-first: each test task must FAIL before its implementation task.
 
-**⚠️ CRITICAL**: Test-first per constitution: each test task must FAIL (module missing) before its implementation task.
+- [ ] T002 [P] Write failing unit tests `tests/unit/user-ids.test.ts`: `generateUserId()` returns a 22-char base64url string matching `^[A-Za-z0-9_-]{22}$`; 1000 generations are all unique; `isUserIdShape` accepts valid ids and rejects non-strings, empty, wrong charset, >64 chars (contracts.md §4).
+- [ ] T003 Implement `lib/user-ids.ts` to pass T002: `generateUserId()` via `node:crypto.randomBytes(16).toString("base64url")`; `isUserIdShape(value)` type guard (1–64 base64url chars, forward-compatible per data-model.md). Pure module, no env access.
+- [ ] T004 [P] Write failing unit tests for the rewritten `lib/users.ts` in `tests/unit/users.test.ts` (replace the alias-mapping tests entirely): `parseApprovedEmails` splits on commas, trims, lowercases, drops empty/whitespace segments, dedupes; single-address list works; `parseApprovedEmails(undefined)` and empty-after-parse throw with a message naming `APPROVED_EMAILS`; `isApprovedEmail` matches normalized; `assertAuthConfigured` throws on unparseable config. Inject a raw string / env-shaped record — no `process.env` reads in tests.
+- [ ] T005 Rewrite `lib/users.ts` to pass T004: `parseApprovedEmails(raw)`, `isApprovedEmail(email, approved)`, `assertAuthConfigured()` reading the new `APPROVED_EMAILS` accessor (added in T006). Remove `aliasForEmail` and the `UsersEnv` alias interface (data-model.md deletions).
+- [ ] T006 [P] Update `lib/env.ts`: replace `approvedEmail(alias)` with `approvedEmails(): string` returning the raw `APPROVED_EMAILS` value (fail-fast via existing `required()`); keep `googleClientId()` and `sessionSecret()` unchanged.
+- [ ] T007 [P] Write failing unit tests for `lib/user-store.ts` in `tests/unit/user-store.test.ts` using an in-memory `UserStoreBackend` (map + counter): first `resolveUser(email)` creates a record with a 22-char id, `num` 1, ISO `createdAt`; second resolve returns the SAME id and num; a different email gets num 2 and a different id; emails are normalized (trimmed/lowercased) to the same record; `displayLabel({id,num,createdAt})` returns `"Person 1"` and `"Person"` when num is missing (research R6, R3).
+- [ ] T008 Implement `lib/user-store.ts` to pass T007: `UserRecord` interface, `UserStoreBackend` interface (`get`, `put`, `nextNumber` per contracts.md §4), `createUserStore(backend?)` with a default Upstash backend (hash `namewahl:users`, field = normalized email, value = JSON record; counter `namewahl:users:nextnum` via INCR — keys per data-model.md), read-or-create `resolveUser` (research R3, race behavior documented in code comment), `displayLabel`.
+- [ ] T009 Update `tests/unit/session.test.ts` for the new payload: round-trip `{ uid: "<22-char>", iat }`; tamper/expiry/malformed rejections still hold; a legacy `{ alias: "A", iat }` payload (correctly signed) is REJECTED (uid missing); uid with wrong charset rejected. Tests must fail before T010.
+- [ ] T010 Update `lib/session.ts` to pass T009: `SessionPayload = { uid: string; iat: number }`; `verifySession` validates uid via `isUserIdShape`; remove the `Alias` type; `getCurrentAlias()` renamed to `getCurrentUid(): Promise<string | null>` (same cookie mechanics otherwise).
+- [ ] T011 Run full check: `npm test` (existing suites green incl. reworked session/users; new suites pass), `npx tsc --noEmit` clean. (`next build` may still fail until US1 rewires actions — record the failure, do not fix here.)
 
-- [ ] T002 [P] Extend `lib/env.ts` with typed fail-fast accessors following the existing `required()` pattern: `googleClientId()` (env `GOOGLE_CLIENT_ID`), `sessionSecret()` (env `SESSION_SECRET`, must be ≥ 32 bytes or throw with a clear message), `approvedEmail(alias: "A" | "B")` (env `APPROVED_USER_A_EMAIL` / `APPROVED_USER_B_EMAIL`, trimmed, must be non-empty). All server-only; never log values.
-- [ ] T003 [P] Write failing unit tests for the session module in `tests/unit/session.test.ts`: seal/verify round-trip preserves `{ alias, iat }`; tampered payload (bit-flip) rejected; expired session (age > 30 days = `SESSION_MAX_AGE_SECONDS`) rejected; malformed value (no dot, bad base64url, wrong JSON shape, alias not "A"/"B") rejected; signature compared via constant-time compare (mock `node:crypto` `timingSafeEqual` call or verify behavior by tampering only the signature). All via injectable `deps` ({ secret, now }) per contracts.md §4 — no env access in tests.
-- [ ] T004 Implement `lib/session.ts` to pass T003: `sealSession`, `verifySession`, `getCurrentAlias()` (reads `cookies()` from `next/headers`, returns `Alias | null`), constants `SESSION_COOKIE_NAME = "namewahl_session"` and `SESSION_MAX_AGE_SECONDS = 30*24*60*60`; HMAC-SHA256 over base64url(JSON) + "." + base64url(sig), `timingSafeEqual` for verification; `"server-only"` import at top; cookie attributes httpOnly, secure in production, sameSite lax, path "/" (data-model.md Session).
-- [ ] T005 [P] Write failing unit tests for the users module in `tests/unit/users.test.ts`: `aliasForEmail` maps approved address (exact, case-insensitive, trimmed) to "A" and the other to "B"; unknown email → null; empty string → null; `assertAuthConfigured` throws when either approved email is missing and when both addresses are identical (data-model.md ApprovedAddress validation rules). All via injectable `env` record — no `process.env` in tests.
-- [ ] T006 Implement `lib/users.ts` to pass T005: `aliasForEmail(email, env?)` and `assertAuthConfigured()` reading via `lib/env.ts` accessors; doc comment stating this module replaces `lib/user.ts` (which stays until US2 removes it).
-- [ ] T007 [P] Write failing unit tests for Google token verification in `tests/unit/google-verify.test.ts` with an injected fake `fetchTokenInfo`: valid claims → `{ ok: true, email }`; `aud` ≠ client id → invalid-token; `email_verified !== "true"` → invalid-token; `exp` in the past (injectable `now`) → invalid-token; tokeninfo returns non-2xx or malformed JSON → invalid-token; missing `GOOGLE_CLIENT_ID` (injectable undefined + env unset) → server-config; token missing email → invalid-token.
-- [ ] T008 Implement `lib/google-verify.ts` to pass T007: `verifyGoogleIdToken(idToken, deps?)` calling `https://oauth2.googleapis.com/tokeninfo?id_token=...`, checking `aud === googleClientId()`, `email_verified === "true"`, `exp > now` (research.md R2); returns discriminated union per contracts.md §4; `"server-only"` import.
-- [ ] T009 Run full check: `npm test` (existing 44 + new unit suites green, new tests were seen to fail first), `npx tsc --noEmit` clean, `npm run build` passes.
-
-**Checkpoint**: Foundation ready — session, allowlist mapping, and token verification are pure, typed, and unit-tested. User stories can start.
+**Checkpoint**: Foundation ready — IDs, parsing, user store, and the new session shape are pure, typed, unit-tested.
 
 ---
 
 ## Phase 3: User Story 1 — Log in with my Gmail address (Priority: P1) 🎯 MVP
 
-**Goal**: An approved user opens the app, sees a Google sign-in button, signs in, and lands directly on the vote screen identified as their alias; the session persists across reloads (FR-001, FR-002, FR-006; SC-001, SC-002).
+**Goal**: Approved sign-in resolves the account to a persistent internal user ID; the session carries `{ uid, iat }`; the vote screen greets the user with a neutral label (FR-001/002/004/006, FR-011; SC-001/002).
 
-**Independent Test**: Fresh browser session on `/` → login screen (no Person A/B buttons); sign in with an approved Google account → vote screen shows the alias; reload → still signed in. (Live validation: quickstart.md V1/V2.)
+**Independent Test**: Sign in with an approved address → vote screen with "Person N" label; Upstash `namewahl:users` gains a record whose id (22-char opaque string) matches the session cookie's uid; sign out/in → same id, same label. (Live: quickstart V1/V2.)
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Add `signIn(idToken: unknown)` server action to `app/actions.ts`: validates input is a non-empty string, calls `verifyGoogleIdToken`, on `ok` calls `aliasForEmail` (via `assertAuthConfigured` guard) and — if the alias is non-null — sets the `namewahl_session` cookie (attributes per data-model.md: httpOnly, secure in production, sameSite lax, maxAge `SESSION_MAX_AGE_SECONDS`, path "/") and returns `{ ok: true, alias }`; maps failures to `{ ok: false, reason: "invalid-token" | "not-approved" | "server-config" }` exactly per contracts.md §1; never returns or logs the email (FR-008). Add exported `SignInResult` type.
-- [ ] T011 [US1] Create `app/login-client.tsx`: `"use client"` component that loads `https://accounts.google.com/gsi/client` via `next/script` (strategy `afterInteractive`), receives `clientId` as a prop from the server (never reads env itself), renders the GIS button (`data-client_id`, `data-callback`), posts the Google credential to `signIn` via a local wrapper (fetch a server action import), on `{ ok: true }` calls `router.refresh()`, on any failure shows a short honest German hint "Anmeldung fehlgeschlagen — bitte erneut versuchen." (FR-010; the distinct denial message is US3/T020). Handle cancelled popup: state simply stays on login with the same hint, no partial state (spec Edge Case 1).
-- [ ] T012 [US1] Rework `app/page.tsx` into the session gate per contracts.md §2: static shell stays; wrap a small async server component in `<Suspense fallback={...}>` that calls `getCurrentAlias()` (lib/session.ts) — valid session renders `<VoteClient alias={...} />`, otherwise `<LoginClient clientId={googleClientId()} />`. No `cookies()` access outside the Suspense boundary (cacheComponents build must pass). Add the German fallback text "Anmeldung wird geprüft…".
-- [ ] T013 [US1] Update `app/vote-client.tsx`: replace the `getCurrentUser`/`setCurrentUser` identity-picker logic with a required `alias: "A" | "B"` prop (display label "Person A"/"Person B" stays); keep every other behavior (pair reserve, instant swap, failure notice) unchanged; keep passing the alias to `submitVote` for now (signature changes in US2/T016). Remove any "Wer bist du?" identity UI.
-- [ ] T014 [US1] Add login-screen styles (centered card, Google button spacing, error hint) to `app/page.module.css`; reuse existing CSS variable palette; no new dependencies.
+- [ ] T012 [US1] Update `signIn` in `app/actions.ts`: after token verification, call `assertAuthConfigured()` + `isApprovedEmail(email, parseApprovedEmails(approvedEmails()))`; unapproved → `{ ok: false, reason: "not-approved" }` BEFORE any user-store access (research R7: denial leaves no record); approved → `resolveUser(email)` from `lib/user-store.ts`; set the cookie with `{ uid: record.id, iat: Date.now() }`; return `{ ok: true, uid: record.id, label: displayLabel(record) }` per contracts.md §1. Keep reason mapping and no-email-logging guarantees unchanged.
+- [ ] T013 [US1] Update `app/page.tsx` session gate: `getCurrentUid()` → for a valid session resolve the display label server-side (read `namewahl:users` via a lookup by uid — add `findUserById(uid)` to `lib/user-store.ts` with unit coverage in T007's file if needed, or pass label through by re-reading the record; must not break cacheComponents/Suspense structure) → render `<VoteClient uid={...} label={...} />`; invalid → `<LoginClient clientId={...} />` unchanged.
+- [ ] T014 [US1] Update `app/vote-client.tsx`: replace the `alias: Alias` prop with `uid: string, label: string`; hint line uses `label` ("Welcher Name gefällt dir besser, Person 3?"); `VoteInput.voter` receives `uid` (still ignored server-side); no other behavior changes.
+- [ ] T015 [US1] Update `app/login-client.tsx` types for the new `SignInResult` (success no longer carries `alias`; nothing in this component reads it — verify and adjust the import/type only). No behavior change.
 
-**Checkpoint**: User Story 1 works end-to-end in a credentialed environment (quickstart V1/V2). `npm run build` must pass with `cacheComponents: true` — if the session read leaked outside Suspense, the build fails here.
+**Checkpoint**: US1 works end-to-end in a credentialed environment (quickstart V1/V2). `npm run build` must pass again here.
 
 ---
 
-## Phase 4: User Story 2 — Votes attributed to the real logged-in account (Priority: P2)
+## Phase 4: User Story 2 — ID-based attribution with mixed legacy data (Priority: P2)
 
-**Goal**: Every vote is attributed to the alias of the actually signed-in account; the client can no longer choose the identity; ranking/winners unchanged (FR-005, FR-009; SC-003, SC-006).
+**Goal**: Votes are recorded under the session uid; historical "A"/"B" records coexist untouched; ranking/winners render unchanged (FR-005, FR-012; SC-003, SC-006).
 
-**Independent Test**: Sign in as alias A, vote → record shows `user: "A"`; from alias B → `"B"`. Unauthenticated `submitVote` call writes nothing. (Automated: T015 integration test; live: quickstart V1 step 4, V6.)
+**Independent Test**: Vote → new stream entries carry the 22-char uid as `user`; pre-005 entries still show "A"/"B" and ranking/winners pages render exactly as before. (Automated: T016/T017; live: quickstart V1 step 3–4.)
 
-### Tests for User Story 2 ⚠️ (write FIRST, must FAIL)
+### Tests for User Story 2 ⚠️ (write FIRST, must FAIL or be updated meaningfully)
 
-- [ ] T015 [P] [US2] Write failing integration test `tests/integration/submit-auth.test.ts`: import `submitVote` from `app/actions.ts` with NO session cookie in the environment → result is `{ ok: false }` with an unauthenticated error and NO store write occurs (assert via a mocked `lib/store` module — e.g. register a `node:test` mock or inject by temporarily setting env-free failure path; follow the harness style of `tests/integration/store.test.ts`); also assert a valid-name pair with `winner === loser` still errors identically to today. This test must not require Upstash credentials to run.
+- [ ] T016 [P] [US2] Update `tests/integration/submit-auth.test.ts`: unauthenticated `submitVote` (no cookie) still returns `{ ok: false }` with ZERO `recordVote` calls; additionally assert the mocked `recordVote` receives `user` as the session uid when a valid `{ uid, iat }` cookie shape is present — mock `lib/session`'s `getCurrentUid` via `mock.module` to return a fixed uid for the positive case and null for the negative case (two tests).
+- [ ] T017 [P] [US2] Extend `tests/unit/ranking.test.ts` (or add a focused case) proving `rankNames` is insensitive to the voter field: feed scores derived from a vote set mixing `user: "A"`, `user: "B"`, and uid-shaped voters — identical totals regardless (documents SC-006 tolerance; no production change expected — this test locks the behavior).
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Change `submitVote(winner, loser)` in `app/actions.ts` to drop the third `user` parameter: derive `user` from `getCurrentAlias()`; unauthenticated/expired → `{ ok: false, error: "Abgelaufen — bitte bitte neu anmelden." }` (adjust wording to match T015 exactly) with zero store calls; keep all existing validation (unknown name, same-pair) unchanged; update the call site in `app/vote-client.tsx` / `lib/vote-sender.ts` send function accordingly.
-- [ ] T017 [US2] Delete `lib/user.ts` and confirm zero remaining references (`rg -n "lib/user|getCurrentUser|setCurrentUser|USER_IDS" app lib tests` is empty); run `npm test` — all suites green including T015.
+- [ ] T018 [US2] Widen `VoteRecord.user` to `string` in `lib/store.ts` (type only — value passes through verbatim); confirm `recordVote`/`scores` bodies need no change; run `npm test` — all suites green including T016.
+- [ ] T019 [US2] Verify no alias remnants: `grep -rn "aliasForEmail\|APPROVED_USER_A\|APPROVED_USER_B\|getCurrentAlias\|: Alias" app lib tests` returns nothing (cleanup any stragglers found); `npx tsc --noEmit` clean.
 
-**Checkpoint**: User Stories 1 AND 2 both work; votes are tamper-proof against client-side identity choice.
+**Checkpoint**: US1 AND US2 work; attribution is identity-scheme-agnostic for readers.
 
 ---
 
 ## Phase 5: User Story 3 — Sign out and access control (Priority: P3)
 
-**Goal**: Signed-in users can end their session deliberately; only the two approved addresses get past login; everyone else sees a friendly denial (FR-003, FR-007; SC-004, SC-005).
+**Goal**: Sign-out and denial behavior preserved under the new identity scheme (FR-003, FR-007, FR-010; SC-004, SC-005).
 
-**Independent Test**: Sign in, click sign-out → login screen returns and stays after reload; sign in with a non-approved Google account → friendly German denial, no vote UI. (Live validation: quickstart V3/V4.)
+**Independent Test**: Sign in → sign out → login screen returns and persists; a non-approved Google account is denied and creates no user record. (Live: quickstart V3 + V5.)
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Add `signOut()` server action to `app/actions.ts`: delete the `namewahl_session` cookie via `cookies().delete(...)`; idempotent (succeeds with no session); returns `{ ok: true }` (contracts.md §1).
-- [ ] T019 [US3] Add a subtle "Abmelden" control to `app/vote-client.tsx` (button in the header area, styled in `app/page.module.css`): calls `signOut()` then `router.refresh()`; after refresh the gate in `app/page.tsx` shows the login screen (FR-007: no vote UI reachable).
-- [ ] T020 [US3] Extend `app/login-client.tsx` to distinguish the denial case: when `signIn` returns `{ ok: false, reason: "not-approved" }`, show the friendly German message "Diese Adresse ist nicht freigeschaltet." instead of the generic failure hint; keep `invalid-token` and `server-config` on the generic hint (SC-004).
+- [ ] T020 [US3] Verify `signOut()` in `app/actions.ts` needs no change (deletes `namewahl_session` regardless of payload shape) — add a focused unit-style assertion if cheap, else document in the task comment; confirm the Abmelden flow in `app/vote-client.tsx` still works with the new props (no code change expected).
+- [ ] T021 [US3] Verify the not-approved path in `app/actions.ts` runs BEFORE `resolveUser` (T012) with a focused test in `tests/integration/submit-auth.test.ts` or a new `tests/unit/signin-flow.test.ts`: given a verified email that fails `isApprovedEmail`, the user-store backend mock records ZERO `put` calls (denial leaves no trace, research R7).
 
 **Checkpoint**: All three user stories independently functional.
 
@@ -105,11 +104,11 @@ Single-project Next.js App Router: `app/`, `lib/`, `tests/unit/`, `tests/integra
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Documentation, full gates, and live validation.
+**Purpose**: Documentation, gates, live validation.
 
-- [ ] T021 [P] Update `README.md` (or create a short "Setup" section if absent): list the four new auth env vars, the Google Cloud Console steps (OAuth client ID + authorized JavaScript origins for localhost and the production URL), and point to `specs/004-gmail-login/quickstart.md`.
-- [ ] T022 Run the complete gate suite: `npm test` (all unit + integration suites), `npx tsc --noEmit`, `npm run build` — all green; verify `rg -n "lib/user" app lib tests` stays empty and `.env.local` is gitignored.
-- [ ] T023 Run `specs/004-gmail-login/quickstart.md` scenarios V1–V6 in a credentialed environment (Google client ID + approved addresses + Upstash): V1 sign-in/vote, V2 session persistence, V3 non-approved denial, V4 sign-out + tampered cookie, V5 fail-fast on missing config, V6 historical data unchanged. Mark any scenario that cannot run here as deferred to the user's environment (same as feature 003).
+- [ ] T022 [P] Update `README.md` Setup section: replace the two per-alias variables with `APPROVED_EMAILS` (comma-separated; append to add a user; first sign-in order assigns "Person N" labels); note the one-time re-login after deploy (004 sessions invalidated) and that old A/B vote data needs no migration.
+- [ ] T023 Run the complete gate suite: `npm test`, `npx tsc --noEmit`, `npm run build` — all green; `grep -rn "APPROVED_USER_A\|APPROVED_USER_B" . --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git` shows only historical spec/doc references.
+- [ ] T024 Run `specs/005-multi-user-identity/quickstart.md` V1–V6 in a credentialed environment: V1 sign-in/stable ID, V2 ID stability across devices, V3 denial leaves no record, V4 extend list without code changes, V5 one-time re-login, V6 fail-fast on empty config. Deferred here (no credentials in this environment).
 
 ---
 
@@ -117,25 +116,25 @@ Single-project Next.js App Router: `app/`, `lib/`, `tests/unit/`, `tests/integra
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: No dependencies — start immediately.
-- **Foundational (Phase 2)**: Depends on T001 (env contract). T002 → T003–T008 (tests before implementations, pairs independent of each other) → T009 gate. **BLOCKS all user stories.**
-- **US1 (Phase 3)**: Depends on Phase 2. T010 → T011 → T012 → T013 → T014 (strict order: action, then client, then gate, then vote-client prop, then styles).
-- **US2 (Phase 4)**: Depends on US1 (vote-client must already render from a session). T015 (test, red) → T016 → T017.
-- **US3 (Phase 5)**: Depends on US1 (needs the session gate + login client) and US2 (submitVote signature final). T018 → T019, T020 (T019/T020 touch different files, parallelizable).
-- **Polish (Phase 6)**: Depends on all stories. T021 parallel with T022; T023 last (needs credentials).
+- **Setup (Phase 1)**: No dependencies.
+- **Foundational (Phase 2)**: T002→T003, T004→T005, T007→T008, T009→T010 are independent red→green pairs; T006 parallel to all; T011 gate. **BLOCKS all user stories.**
+- **US1 (Phase 3)**: Depends on Phase 2. T012 → T013 → T014 → T015 (action first, then page, then client props).
+- **US2 (Phase 4)**: Depends on US1 (session shape live). T016/T017 (tests) → T018 → T019.
+- **US3 (Phase 5)**: Depends on US1/T012 (not-approved ordering). T020 and T021 independent of each other.
+- **Polish (Phase 6)**: Depends on all stories. T022 parallel with T023; T024 last (credentials).
 
 ### User Story Dependencies
 
-- **US1 (P1)**: Foundational only — no other story dependency. MVP.
-- **US2 (P2)**: Builds on US1's session; independently testable via T015 once T010 exists.
-- **US3 (P3)**: Safety net around US1; needs US2's final action signatures to avoid rework.
+- **US1 (P1)**: Foundational only. MVP.
+- **US2 (P2)**: Builds on US1's session; tests lock mixed-legacy tolerance.
+- **US3 (P3)**: Mostly verification tasks — behavior preserved by design; T021 guards the no-record-on-denial invariant.
 
 ### Parallel Opportunities
 
-- Phase 2: T003+T004, T005+T006, T007+T008 are three independent test/implementation pairs (different files) — pairs can interleave, and T002 is parallel to all.
-- T015 is parallel to nothing else in its phase (it blocks T016 by design: red first).
-- T019 and T020 (different files: vote-client vs login-client) can run in parallel.
-- T021 parallel with T022.
+- Phase 2: three independent test/impl pairs + T006 all parallelizable.
+- T016 ∥ T017 (different files).
+- T020 ∥ T021.
+- T022 ∥ T023.
 
 ---
 
@@ -143,22 +142,22 @@ Single-project Next.js App Router: `app/`, `lib/`, `tests/unit/`, `tests/integra
 
 ### MVP First (User Story 1 Only)
 
-1. Complete Phase 1 (T001) and Phase 2 (T002–T009) — foundation.
-2. Complete Phase 3 (T010–T014).
-3. **STOP and VALIDATE**: quickstart V1/V2 in a credentialed environment.
-4. At this point login replaces the identity picker (FR-001/002/006 done).
+1. Phase 1 + Phase 2 (foundation).
+2. Phase 3 (T012–T015) → login resolves to stable IDs.
+3. **STOP and VALIDATE**: quickstart V1/V2.
 
 ### Incremental Delivery
 
-1. Foundation → US1 (MVP: real login, persistent session) → validate.
-2. + US2 (attribution from session; client identity choice impossible) → validate T015 green + quickstart V6.
-3. + US3 (sign-out + access control) → validate quickstart V3/V4.
-4. Polish: docs, full gates, live quickstart pass.
+1. Foundation → US1 (stable IDs, neutral labels) → validate.
+2. + US2 (uid attribution, mixed-legacy tolerance locked by tests) → validate.
+3. + US3 (sign-out/denial invariants verified) → validate.
+4. Polish: docs, gates, live quickstart.
 
 ### Notes
 
 - [P] tasks = different files, no dependencies.
 - [Story] label maps task to spec user story for traceability.
-- Verify each new test FAILS before implementing it (constitution Principle III).
+- Verify each new test FAILS before implementing (constitution Principle III).
 - Commit after each task or logical group.
-- No new npm dependencies anywhere in this feature (research.md R1–R3 decisions).
+- No new npm dependencies (research.md R1–R3).
+- Operator migration (env var swap) is quickstart.md Prerequisites + T022; the one-time 004-session invalidation is documented in research R5 / quickstart V5.
