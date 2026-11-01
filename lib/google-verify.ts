@@ -13,13 +13,18 @@ export interface GoogleTokenClaims {
   aud?: string;
   email?: string;
   email_verified?: string;
+  /** Given (first) name from the Google profile, if shared (feature 007).
+   *  tokeninfo returns it only when the person's Google profile exposes it. */
+  given_name?: string;
+  /** Full profile name; fallback source when given_name is absent. */
+  name?: string;
   /** Google's tokeninfo returns this as a STRING (all fields are strings);
    *  Number() coercion happens in the exp check. */
   exp?: number | string;
 }
 
 export type GoogleVerifyResult =
-  | { ok: true; email: string }
+  | { ok: true; email: string; firstName?: string }
   | {
       ok: false;
       reason: "invalid-token" | "server-config";
@@ -101,5 +106,17 @@ export async function verifyGoogleIdToken(
     return { ok: false, reason: "invalid-token", stage: "expired" };
   }
 
+  // Feature 007 (research R1/R3): derive the first name from the verified
+  // tokeninfo response — given_name when present, else the first word of
+  // the full name. No extra network call, no scope change. Absent on any
+  // failure branch (never attaches a name to an unverified token).
+  const trimmedGiven = typeof c.given_name === "string" ? c.given_name.trim() : "";
+  if (trimmedGiven !== "") {
+    return { ok: true, email: c.email.trim(), firstName: trimmedGiven };
+  }
+  const fullName = typeof c.name === "string" ? c.name.trim() : "";
+  if (fullName !== "") {
+    return { ok: true, email: c.email.trim(), firstName: fullName.split(/\s+/)[0]! };
+  }
   return { ok: true, email: c.email.trim() };
 }
