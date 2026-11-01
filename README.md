@@ -11,8 +11,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
      application*). Add `http://localhost:3000` and your production URL as
      *Authorized JavaScript origins*. The two approved Gmail addresses
      should be added as *Test users* on the OAuth consent screen.
-   - `APPROVED_USER_A_EMAIL` / `APPROVED_USER_B_EMAIL` — the two approved
-     Gmail addresses; the variable suffix maps them to alias "A" / "B".
+   - `APPROVED_EMAILS` — comma-separated approved Gmail addresses
+     (secret). Append an address to add a user — no code change, no data
+     migration. Each approved address becomes a permanent internal user
+     ID at first sign-in; display labels ("Person 1", "Person 2", …)
+     follow first-sign-in order. Replaces 004's
+     `APPROVED_USER_A_EMAIL` / `APPROVED_USER_B_EMAIL`. One-time effect of
+     upgrading: existing 004 sessions are invalidated, so each browser
+     re-logs in once; historical A/B vote records stay untouched (no
+     migration).
    - `SESSION_SECRET` — at least 32 random bytes (`openssl rand -base64 32`).
    In production, set the same variables in Vercel (Settings → Environment
    Variables) and redeploy.
@@ -23,7 +30,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
    `npm run build`.
 
 4. End-to-end validation scenarios: see
-   `specs/004-gmail-login/quickstart.md` (V1–V6).
+   `specs/005-multi-user-identity/quickstart.md` (V1–V6).
 
 ## Getting Started
 
