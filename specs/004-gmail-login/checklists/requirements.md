@@ -31,7 +31,7 @@
 
 ## Notes
 
-- All items pass. Clarification decisions from session 2026-11-02 are
-  recorded in the spec's Clarifications section (allowlist of two
-  addresses; alias-derived attribution preserving A/B history; sign-out
-  returns to login with no active session).
+- Replaces the two hardcoded user ids with a real login: the approved
+  Gmail addresses are secret environment variables (like other credentials,
+  never committed) and map to aliases A/B; non-approved accounts are
+  denied with a friendly message.

@@ -15,6 +15,7 @@
 - Q: Who may use the app after login — any Gmail address, or only a fixed allowlist? → A: B — only the two pre-approved addresses may log in; everyone else sees a friendly "no access" message.
 - Q: How should the vote record identify the user — the full Gmail address, or an internal alias? → A: B — votes are attributed to a stable alias (A or B) derived from the logged-in address, so existing ranking/winners data stays meaningful; the app displays only "Person A" / "Person B".
 - Q: After signing out, where should the user land? → A: A — back on the login page with no active session; the identity choice (alias A/B) follows automatically from the logged-in address.
+- Q: Where do the two approved Gmail addresses live — in committed config or as secret environment variables? → A: Secret environment variables — the addresses are stored like other credentials (never committed); the alias mapping address→A/B is part of that same secret configuration.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -135,7 +136,11 @@ non-approved Gmail address and verify it is refused with a friendly message.
   account.
 - **FR-004**: Each approved address MUST map deterministically to one fixed
   alias ("A" or "B"); the mapping MUST be an explicit, editable
-  configuration (not the order of first login).
+  configuration (not the order of first login). The approved addresses and
+  their alias mapping MUST live as secret environment variables (alongside
+  the existing service credentials), never committed to the repository.
+  A missing or malformed address configuration MUST fail fast with a clear
+  error.
 - **FR-005**: Vote records MUST be attributed to the alias derived from the
   logged-in account at vote time; ranking and winners MUST continue to work
   with the existing alias-based data unchanged.
@@ -158,9 +163,9 @@ non-approved Gmail address and verify it is refused with a friendly message.
   plus the alias ("A" or "B") the app maps it to. Only two exist.
 - **Session**: The signed-in state in a browser — exists from successful
   login until sign-out or expiry; determines whether vote UI is reachable.
-- **Alias mapping**: Configuration that ties each of the two approved
-  addresses to exactly one existing alias identity ("A" or "B"), preserving
-  all historical vote attribution.
+- **Alias mapping**: Secret configuration (environment variables) that ties
+  each of the two approved addresses to exactly one existing alias identity
+  ("A" or "B"), preserving all historical vote attribution.
 
 ## Success Criteria *(mandatory)*
 
@@ -185,6 +190,9 @@ non-approved Gmail address and verify it is refused with a friendly message.
   Gmail address; the two approved addresses are fixed in configuration.
 - The alias meanings ("A"/"B") stay exactly as they are today — login only
   changes *how* an identity is obtained, not what identities exist.
+- The approved addresses are treated like other deployment secrets
+  (environment variables in `.env.local` locally and the hosting
+  platform's secret store in production); they are never committed.
 - Google sign-in is used via Google's hosted login experience; the app does
   not build its own email/password system and does not send email.
 - No personal data beyond "this address maps to alias X" is stored; vote
@@ -192,3 +200,6 @@ non-approved Gmail address and verify it is refused with a friendly message.
 - Historical votes remain validated by their existing alias attribution.
 - Access control happens after Google's authentication so the approved-list
   check is based on a verified address, not a typed one.
+- A missing or misconfigured address secret is an operator error to fix at
+  deployment time, not a user-facing state; the app fails fast at startup
+  rather than serving a broken login.
