@@ -58,6 +58,9 @@ export default function LoginClient({ clientId }: { clientId: string }) {
             router.refresh();
           } else if (result.reason === "not-approved") {
             setError("Diese Adresse ist nicht freigeschaltet.");
+          } else if (result.reason === "server-config" && result.detail) {
+            // Operator diagnostic (never secret values — see app/actions.ts).
+            setError(`Konfigurationsproblem: ${result.detail}`);
           } else {
             setError("Anmeldung fehlgeschlagen — bitte erneut versuchen.");
           }

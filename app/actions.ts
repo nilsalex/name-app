@@ -32,6 +32,10 @@ export type SignInResult =
   | {
       ok: false;
       reason: "invalid-token" | "not-approved" | "server-config";
+      /** Safe, operator-facing diagnostic hint (spec 005 debugging aid);
+       *  present only on server-config failures. NEVER contains secret
+       *  values — only the variable name involved (FR-008 boundary kept). */
+      detail?: string;
     };
 
 export interface WinnersResult {
@@ -76,10 +80,24 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
     });
     return { ok: true, uid: record.id, label: displayLabel(record) };
   } catch (err) {
-    // Missing/malformed secret configuration is an operator error (FR-011):
-    // fail the sign-in without leaking details to the client.
+    // Missing/malformed secret configuration is an operator error (FR-011).
     console.error("signIn failed:", err);
-    return { ok: false, reason: "server-config" };
+    // Safe diagnostic: expose only which variable is misconfigured (name
+    // only, never its value) so deployment issues are debuggable without
+    // runtime-log access. Anything else (file paths, stack frames, token
+    // fragments) is suppressed.
+    const msg = err instanceof Error ? err.message : String(err);
+    const varMatch = /(?:variable|MISSING)\s+([A-Z_]{3,})|([A-Z_]{3,})\s+(?:is|must|exists)/.exec(
+      msg
+    );
+    const namedVar = varMatch?.[1] ?? varMatch?.[2];
+    return {
+      ok: false,
+      reason: "server-config",
+      detail: namedVar
+        ? `Environment check failed for ${namedVar} (name only, never its value).`
+        : "Unknown server configuration problem.",
+    };
   }
 }
 
