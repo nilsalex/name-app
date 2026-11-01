@@ -30,6 +30,13 @@ const validClaims = {
   exp: EXP,
 };
 
+// The REAL Google tokeninfo endpoint returns every field as a JSON string
+// (observed live: "exp": "1762342400"). This variant guards the coercion.
+const validClaimsAsStringExp = {
+  ...validClaims,
+  exp: String(EXP),
+};
+
 const baseDeps = {
   clientId: CLIENT_ID,
   now: () => NOW,
@@ -66,6 +73,14 @@ describe("verifyGoogleIdToken", () => {
       reason: "invalid-token",
       stage: "email-unverified",
     });
+  });
+
+  it("accepts exp as a STRING (the real tokeninfo shape)", async () => {
+    const result = await verifyGoogleIdToken("some.jwt.value", {
+      ...baseDeps,
+      fetchTokenInfo: fakeFetch(validClaimsAsStringExp),
+    });
+    assert.deepEqual(result, { ok: true, email: "person.a@gmail.com" });
   });
 
   it("rejects an expired token", async () => {

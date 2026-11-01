@@ -13,7 +13,9 @@ export interface GoogleTokenClaims {
   aud?: string;
   email?: string;
   email_verified?: string;
-  exp?: number;
+  /** Google's tokeninfo returns this as a STRING (all fields are strings);
+   *  Number() coercion happens in the exp check. */
+  exp?: number | string;
 }
 
 export type GoogleVerifyResult =
@@ -90,7 +92,12 @@ export async function verifyGoogleIdToken(
     return { ok: false, reason: "invalid-token", stage: "email-missing" };
   }
   const nowSec = Math.floor((deps?.now ? deps.now() : Date.now()) / 1000);
-  if (typeof c.exp !== "number" || c.exp <= nowSec) {
+  // Google's tokeninfo endpoint returns ALL fields as JSON strings —
+  // including numeric ones like exp (e.g. "exp": "1762342400"; the same
+  // reason email_verified is compared against the string "true"). Accept
+  // both string and number forms; anything non-numeric is fatal.
+  const expSec = Number(c.exp);
+  if (!Number.isFinite(expSec) || expSec <= nowSec) {
     return { ok: false, reason: "invalid-token", stage: "expired" };
   }
 
