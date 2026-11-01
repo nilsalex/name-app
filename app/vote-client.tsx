@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { nextPair, type Pair } from "@/lib/pairing";
 import { getCurrentUser, setCurrentUser, USER_IDS, type UserId } from "@/lib/user";
-import { submitVote } from "@/app/actions";
+import { submitVote, getScores } from "@/app/actions";
 import styles from "./page.module.css";
 
 export default function VoteClient() {
@@ -14,11 +14,23 @@ export default function VoteClient() {
   // Math.random() must not run during prerender (Next.js Cache Components),
   // so the first pair is generated on mount in an effect.
   const [pair, setPair] = useState<Pair | null>(null);
+  // Feature 002: score map drives weighted pair selection (FR-006). Fetched
+  // on mount and refreshed after each successful vote so the very next pair
+  // reflects the latest standings (US3).
+  const [scores, setScores] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    setPair(nextPair());
+    let cancelled = false;
+    void (async () => {
+      const current = await getScores();
+      if (!cancelled) setScores(current);
+      setPair(nextPair(undefined, current));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const chooseUser = useCallback((id: UserId) => {
@@ -37,10 +49,19 @@ export default function VoteClient() {
           setError(result.error ?? "Fehler — bitte nochmal versuchen.");
           return;
         }
-        setPair((prev) => nextPair(prev ?? undefined));
+        // Refresh scores first so the next draw uses the latest standings
+        // (US3 / FR-006); fall back to the stale map if the fetch fails.
+        let fresh = scores;
+        try {
+          fresh = await getScores();
+          setScores(fresh);
+        } catch {
+          // keep stale scores — draw continues with slightly older weights
+        }
+        setPair((prev) => nextPair(prev ?? undefined, fresh));
       });
     },
-    [user]
+    [user, scores]
   );
 
   if (!user) {

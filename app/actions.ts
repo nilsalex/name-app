@@ -53,6 +53,11 @@ export async function getRanking(): Promise<RankedName[]> {
   return rankNames(COLOGNE_200_BOY_NAMES, current);
 }
 
+/** Raw win counts for weighted pair selection (feature 002, FR-006). */
+export async function getScores(): Promise<Record<string, number>> {
+  return scores();
+}
+
 /** The name(s) at rank 1, including ties (FR-009). */
 export async function getWinners(): Promise<WinnersResult> {
   try {
