@@ -14,6 +14,15 @@ async function RankingList() {
     // state instead of failing the page (spec edge case).
     return <p className={styles.empty}>Rangliste momentan nicht verfügbar.</p>;
   }
+  if (ranking === null) {
+    // Signed out (feature 006, research R6): a login prompt, NOT an empty
+    // 200-name list (which would falsely read as "you voted nothing").
+    return (
+      <p className={styles.empty}>
+        Melde dich an, um deine Rangliste zu sehen.
+      </p>
+    );
+  }
   return (
     <ol className={styles.list}>
       {ranking.map((entry) => (
@@ -30,7 +39,7 @@ async function RankingList() {
 export default function RankingPage() {
   return (
     <main className={styles.page}>
-      <h1 className={styles.heading}>Rangliste</h1>
+      <h1 className={styles.heading}>Deine Rangliste</h1>
       <Suspense fallback={<p className={styles.loading}>Lade Rangliste…</p>}>
         <RankingList />
       </Suspense>

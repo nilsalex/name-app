@@ -2,7 +2,7 @@
 
 // Server actions for the voting app (contracts/contracts.md).
 import { COLOGNE_200_BOY_NAMES } from "@/lib/names";
-import { recordVote, scores } from "@/lib/store";
+import { recordVote, scores, userScores } from "@/lib/store";
 import { rankNames } from "@/lib/ranking";
 import type { RankedName } from "@/lib/ranking";
 import {
@@ -150,9 +150,16 @@ export async function submitVote(
   }
 }
 
-/** Current ranking of all 200 names (FR-007/FR-008, FR-014 shared ranks). */
-export async function getRanking(): Promise<RankedName[]> {
-  const current = await scores();
+/**
+ * The signed-in user's personal ranking of all 200 names (feature 006 US1,
+ * FR-001/FR-002): computed EXCLUSIVELY from the user's own vote tally.
+ * Returns null when signed out — callers render a login prompt (research R6);
+ * no global fallback, and zero store reads happen in that case (INV-1).
+ */
+export async function getRanking(): Promise<RankedName[] | null> {
+  const uid = await getCurrentUid();
+  if (uid === null) return null;
+  const current = await userScores(uid);
   return rankNames(COLOGNE_200_BOY_NAMES, current);
 }
 
@@ -161,11 +168,21 @@ export async function getScores(): Promise<Record<string, number>> {
   return scores();
 }
 
-/** The name(s) at rank 1, including ties (FR-009). */
+/**
+ * The name(s) at personal rank 1, including ties (feature 006 US1/FR-003).
+ * Signed out → { ok: false } (UI shows the login prompt, INV-1).
+ * Signed in with zero personal votes → { ok: true, winners: [] }.
+ */
 export async function getWinners(): Promise<WinnersResult> {
   try {
     const ranking = await getRanking();
-    const winners = ranking.filter((r) => r.rank === 1).map((r) => r.name);
+    if (ranking === null) return { ok: false, error: "Nicht angemeldet." };
+    // Zero personal votes → no winners yet (UI: "Noch keine Stimmen — alle
+    // Namen führen!"); with any vote cast, rank-1 names all have score ≥ 1,
+    // so the score guard only affects the empty-tally state.
+    const winners = ranking
+      .filter((r) => r.rank === 1 && r.score > 0)
+      .map((r) => r.name);
     return { ok: true, winners };
   } catch (err) {
     console.error("getWinners failed:", err);

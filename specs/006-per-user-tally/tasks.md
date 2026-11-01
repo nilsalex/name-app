@@ -64,13 +64,13 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
 - [x] T009 [P] [US1] Write failing action-scoping tests in `tests/unit/actions-ranking.test.ts` (module-mock idiom from `tests/unit/signin-flow.test.ts`): `getRanking()` with no session → returns `null` AND issues zero Redis reads (data-model INV-1); with uid "u-test-1" → `rankNames` result built from `userScores("u-test-1")` only; `getWinners()` signed-out → `{ ok: false }`, signed-in with empty tally → `{ ok: true, winners: [] }`, signed-in with tally → names at personal rank 1 including ties
-- [ ] T010 [US1] Implement uid-scoped `getRanking`/`getWinners` in `app/actions.ts` per contracts.md: `getCurrentUid()` → `null` ⇒ `getRanking` returns `null`; otherwise `rankNames(COLOGNE_200_BOY_NAMES, await userScores(uid))`; `getWinners` maps rank-1 names (green for T009)
+- [x] T010 [US1] Implement uid-scoped `getRanking`/`getWinners` in `app/actions.ts` per contracts.md: `getCurrentUid()` → `null` ⇒ `getRanking` returns `null`; otherwise `rankNames(COLOGNE_200_BOY_NAMES, await userScores(uid))`; `getWinners` maps rank-1 names (green for T009)
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Update `app/ranking/page.tsx`: heading "Deine Rangliste" (FR-009); `null` result → login prompt "Melde dich an, um deine Rangliste zu sehen." instead of a list (research R6); error catch unchanged
-- [ ] T012 [P] [US1] Update `app/winners/page.tsx`: heading "Deine Gewinner"; `{ ok: false }` → login prompt pattern matching ranking page; `{ ok: true, winners: [] }` keeps "Noch keine Stimmen — alle Namen führen!" (now truthful per user)
-- [ ] T013 [US1] Run `npm test && npx tsc --noEmit && npm run build` (PPR/Suspense streaming intact) — US1 checkpoint: personal ranking fully functional, deployable/testable independently (spec V1–V3)
+- [x] T011 [P] [US1] Update `app/ranking/page.tsx`: heading "Deine Rangliste" (FR-009); `null` result → login prompt "Melde dich an, um deine Rangliste zu sehen." instead of a list (research R6); error catch unchanged
+- [x] T012 [P] [US1] Update `app/winners/page.tsx`: heading "Deine Gewinner"; `{ ok: false }` → login prompt pattern matching ranking page; `{ ok: true, winners: [] }` keeps "Noch keine Stimmen — alle Namen führen!" (now truthful per user)
+- [x] T010 [US1] Run `npm test && npx tsc --noEmit && npm run build` (PPR/Suspense streaming intact) — US1 checkpoint: personal ranking fully functional, deployable/testable independently (spec V1–V3)
 
 **Checkpoint**: User Story 1 complete — personal ranking/winners live.
 
