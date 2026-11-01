@@ -13,8 +13,8 @@
 ### Session 2026-11-02
 
 - Q: Who may use the app after login — any Gmail address, or only a fixed allowlist? → A: B — only the two pre-approved addresses may log in; everyone else sees a friendly "no access" message.
-- Q: How should the vote record identify the user — the full Gmail address, or an internal alias? → A: Bis — votes are attributed to a stable alias (A or B) derived from the logged-in address, so existing ranking/winners data stays meaningful; the app displays only "Person A" / "Person B".
-- Q: After signing out, where should the user land? → A: A — back on the login page with no残留 session; the identity choice (alias A/B) follows automatically from the logged-in address.
+- Q: How should the vote record identify the user — the full Gmail address, or an internal alias? → A: B — votes are attributed to a stable alias (A or B) derived from the logged-in address, so existing ranking/winners data stays meaningful; the app displays only "Person A" / "Person B".
+- Q: After signing out, where should the user land? → A: A — back on the login page with no active session; the identity choice (alias A/B) follows automatically from the logged-in address.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -142,7 +142,8 @@ non-approved Gmail address and verify it is refused with a friendly message.
 - **FR-006**: The signed-in state MUST persist across reloads and revisits
   within the same browser until sign-out or expiry.
 - **FR-007**: The signed-in state MUST NOT outlive a deliberate sign-out;
-  after sign-out, no vote UI is reachable without re-login.
+  after sign-out, no vote UI is reachable without re-login and the open
+  session is terminated on the spot.
 - **FR-008**: The user's email address or account details MUST NOT be stored
   in vote records or shown anywhere in the app; only "Person A"/"Person B"
   labels are displayed.

@@ -34,4 +34,4 @@
 - All items pass. Clarification decisions from session 2026-11-02 are
   recorded in the spec's Clarifications section (allowlist of two
   addresses; alias-derived attribution preserving A/B history; sign-out
-  returns to login with no残留 session).
+  returns to login with no active session).
