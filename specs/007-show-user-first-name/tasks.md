@@ -71,8 +71,8 @@ Single Next.js App Router project at repo root: `app/`, `lib/`, `tests/unit/`, `
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Add one regression test in `tests/integration/submit-auth.test.ts`: an unauthenticated request (`uid === null`, expired/absent cookie) resolves NO user record and reaches the login screen rather than any display-label path — assert via the existing gate/`displayLabel` seams that no name string is produced for signed-out access (must pass against current code; fix `lib/user-store.ts`/`lib/session.ts` only if it fails)
-- [ ] T011 [US2] Manually validate quickstart V3: signed out in a browser that previously showed user X's name → login screen shows no name of X or anyone; sign-in path still reachable
+- [X] T010 [US2] Add one regression test in `tests/integration/submit-auth.test.ts`: an unauthenticated request (`uid === null`, expired/absent cookie) resolves NO user record and reaches the login screen rather than any display-label path — assert via the existing gate/`displayLabel` seams that no name string is produced for signed-out access (must pass against current code; fix `lib/user-store.ts`/`lib/session.ts` only if it fails)
+- [X] T011 [US2] Manually validate quickstart V3: signed out in a browser that previously showed user X's name → login screen shows no name of X or anyone; sign-in path still reachable
 
 **Checkpoint**: Signed-out state provably name-free; US1 unaffected.
 
@@ -86,11 +86,11 @@ Single Next.js App Router project at repo root: `app/`, `lib/`, `tests/unit/`, `
 
 ### Tests for User Story 3 (write FIRST)
 
-- [ ] T012 [P] [US3] Write failing unit tests in `tests/unit/user-store.test.ts` for the no-name path: creating a record with `resolveUser(email)` (no name argument) leaves `firstName` absent (key absent from JSON, never `""`); record without `firstName` but with `num` → `displayLabel` returns `Person ${num}` (unchanged 005 behavior); record without either → `Person`. Also verify a derived empty/whitespace-only name (`""` after trim) results in an absent field, not an empty string (data-model.md validation: "Empty strings are never stored")
+- [X] T012 [P] [US3] Write failing unit tests in `tests/unit/user-store.test.ts` for the no-name path: creating a record with `resolveUser(email)` (no name argument) leaves `firstName` absent (key absent from JSON, never `""`); record without `firstName` but with `num` → `displayLabel` returns `Person ${num}` (unchanged 005 behavior); record without either → `Person`. Also verify a derived empty/whitespace-only name (`""` after trim) results in an absent field, not an empty string (data-model.md validation: "Empty strings are never stored")
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Implement absence semantics in `lib/user-store.ts` `resolveUser`/`displayLabel`: never write `firstName` when the validated derivation is empty or whitespace-only (normalize at the write boundary); fallback chain per contracts.md table — this task only lands whatever T012 forces (likely confirming existing behavior plus the empty-derivation guard; change only what the failing test demands) (depends on T012)
+- [X] T013 [US3] Implement absence semantics in `lib/user-store.ts` `resolveUser`/`displayLabel`: never write `firstName` when the validated derivation is empty or whitespace-only (normalize at the write boundary); fallback chain per contracts.md table — this task only lands whatever T012 forces (likely confirming existing behavior plus the empty-derivation guard; change only what the failing test demands) (depends on T012)
 
 **Checkpoint**: All three user stories independently functional; fallback never produces blanks or errors.
 

@@ -26,6 +26,39 @@ function fakeBackend(): UserStoreBackend & { putCalls: number } {
 }
 
 describe("createUserStore.resolveUser", () => {
+  // Feature 007 US3 (T012): a name-less resolution must leave the optional
+  // field ABSENT — the key never appears in the stored JSON, and an empty /
+  // whitespace-only derived name is dropped at the write boundary (never
+  // stored as "" — data-model.md validation).
+  it("omits firstName entirely when no name is passed (007 US3)", async () => {
+    const backend = fakeBackend();
+    const store = createUserStore(backend);
+    const record = await store.resolveUser("person.a@gmail.com");
+    assert.equal("firstName" in record, false);
+    // And the stored JSON carries no empty-string placeholder either:
+    const stored = await backend.get("person.a@gmail.com");
+    assert.ok(stored);
+    assert.equal(JSON.stringify(stored).includes("firstName"), false);
+  });
+
+  it("drops an empty or whitespace-only derived name at the write boundary (007 US3)", async () => {
+    for (const bad of ["", "   ", "\t\n"]) {
+      const store = createUserStore(fakeBackend());
+      const record = await store.resolveUser("person.a@gmail.com", bad);
+      assert.equal(
+        "firstName" in record,
+        false,
+        `expected absence for ${JSON.stringify(bad)}`
+      );
+    }
+  });
+
+  it("trims surrounding whitespace from a derived name before storing (007 US3)", async () => {
+    const store = createUserStore(fakeBackend());
+    const record = await store.resolveUser("person.a@gmail.com", "  Nils ");
+    assert.equal(record.firstName, "Nils");
+  });
+
   it("creates a record on first resolve: 22-char id, num 1, ISO createdAt", async () => {
     const backend = fakeBackend();
     const store = createUserStore(backend);
