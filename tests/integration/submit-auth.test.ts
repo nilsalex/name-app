@@ -21,7 +21,7 @@ describe("submitVote authorization (spec 004 US2)", () => {
   it("rejects an unauthenticated vote with no store write", async () => {
     // Import AFTER the mock is registered.
     const { submitVote } = await import("../../app/actions");
-    // No session cookie is set in this environment -> getCurrentAlias()
+    // No session cookie is set in this environment -> getCurrentUid()
     // resolves null (cookies() outside a request returns an empty store).
     const result = await submitVote("Felix", "Paul");
     assert.equal(result.ok, false);

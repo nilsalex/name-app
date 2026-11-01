@@ -3,8 +3,7 @@
 //   UPSTASH_REDIS_REST_URL=https://...upstash.io
 //   UPSTASH_REDIS_REST_TOKEN=...
 //   GOOGLE_CLIENT_ID=...apps.googleusercontent.com   (004)
-//   APPROVED_USER_A_EMAIL=...                        (004)
-//   APPROVED_USER_B_EMAIL=...                        (004)
+//   APPROVED_EMAILS=... comma-separated              (004/005)
 //   SESSION_SECRET=<>= 32 random bytes>              (004)
 // Next.js loads .env.local automatically; this module fails fast with a
 // clear message when a required value is missing or malformed. Values are
@@ -52,8 +51,7 @@ export function sessionSecret(): string {
 
 /**
  * Raw comma-separated approved-address list (spec 005 FR-011):
- * APPROVED_EMAILS=person.a@gmail.com,person.b@gmail.com
- * Replaces 004's APPROVED_USER_A_EMAIL / APPROVED_USER_B_EMAIL. Parsing
+ * APPROVED_EMAILS=person.a@gmail.com,person.b@gmail.com. Parsing
  * and normalization live in lib/users.ts.
  */
 export function approvedEmails(): string {
