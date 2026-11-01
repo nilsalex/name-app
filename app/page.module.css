@@ -46,18 +46,23 @@
      already exceeds 44px, this makes it explicit). */
   min-width: 0;
   min-height: 44px;
-  max-width: 44vw;
-  /* T003 refinement for 009 (research R3 worst-case math for the STATIC
-     card width): a basis-0 card is ≈106px wide at 320px, so the 008 16px
-     padding floor would leave only 74px of text room vs ≈87px for the
-     longest real names ("Maximilian"/"Konstantin") and make the ellipsis
-     reachable. Floor lowered to 8px: ≈106 − 2×8 = 90px text room ≥ 87px —
-     ellipsis stays unreachable at ≥320px (contract S1.5 preserves 008
-     C1.3-data). Vertical hit padding stays 22px (touch floor preserved). */
-  padding: 22px clamp(8px, 4vw, 26px);
-  /* T004 (R2, clarification Q1): shrink font first (26px → 15px floor,
-     dropped to 15px by T005 worst-case math; only reached below ~330px). */
-  font-size: clamp(15px, 4.6vw, 26px);
+  /* Feature 010 (T002): max-width: 44vw REMOVED — the equal halves now
+     stretch to the full row available to the voting area (viewport minus
+     the 24px page padding), so the pair spans both available edges at
+     every width (FR-001/SC-001, contract M1.1). The 009 staticity
+     machinery (flex 1 1 0) above is untouched. */
+  /* Feature 010 (T003, research R3/R4): vertical padding 22 → 30px grows
+     each box to ≈86px tall at mobile sizes (M1.2) — far under the ~290px
+     scroll bound (R6); the 44px touch floor is preserved. Horizontal
+     floor lowered 8 → 6px: with the font clamp below, "Maximilian"/
+     "Konstantin" at 320px are ≈87px of text in 104 − 2×6 = 92px room ⇒
+     ≥5px slack — fitting no worse than 009 (FR-003, contract M2.1/M2.2). */
+  padding: 30px clamp(6px, 4vw, 26px);
+  /* Feature 010 (T003, research R3): shrink font first — floor 15px and
+     4.6vw slope unchanged (fit at 320px identical to 009), cap raised
+     26 → 40px so names are the dominant text and reach 40px on wide
+     viewports ≥~870px (FR-004/SC-002, contract M1.4). */
+  font-size: clamp(15px, 4.6vw, 40px);
   /* …never break a name onto several lines (FR-002/FR-003), */
   white-space: nowrap;
   /* …and only fall back to an ellipsis when even the clamp floor overflows
@@ -87,11 +92,13 @@
 }
 
 /* T003 (R3, contract C1.6): the "oder" separator never shrinks or wraps —
-   it stays visible between the two cards at every width. */
+   it stays visible between the two cards at every width. Feature 010
+   (T004): font bumped 14 → 16px so it keeps visual weight between the
+   enlarged cards (contract M1.5). */
 .vs {
   flex: 0 0 auto;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 16px;
   opacity: 0.55;
 }
 
