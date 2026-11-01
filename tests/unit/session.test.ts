@@ -15,7 +15,7 @@ import {
   type SessionPayload,
 } from "../../lib/session";
 
-const payload: SessionPayload = { alias: "A", iat: NOW };
+const payload: SessionPayload = { uid: "QkT9x2mR7pLw4vNs8JeD1A", iat: NOW };
 
 describe("session seal/verify", () => {
   it("round-trips a valid payload", () => {
@@ -33,7 +33,10 @@ describe("session seal/verify", () => {
     const [data, sig] = sealed.split(".");
     const decoded = Buffer.from(data, "base64url").toString("utf8");
     const tampered = Buffer.from(
-      decoded.replace('"alias":"A"', '"alias":"B"'),
+      decoded.replace(
+        "QkT9x2mR7pLw4vNs8JeD1A",
+        "Otherx2mR7pLw4vNs8JeD1A"
+      ),
       "utf8"
     ).toString("base64url");
     assert.equal(verifySession(`${tampered}.${sig}`, deps), null);
@@ -59,21 +62,35 @@ describe("session seal/verify", () => {
     assert.deepEqual(verifySession(sealed, later), payload);
   });
 
-  it("rejects malformed values: no dot, bad base64, wrong shape, bad alias", () => {
+  it("rejects malformed values: no dot, bad base64, wrong shape, bad uid", () => {
     assert.equal(verifySession("not-a-sealed-value", deps), null);
     assert.equal(verifySession("!!!.!!!" as string, deps), null);
     const bogus = Buffer.from(JSON.stringify({ x: 1 }), "utf8").toString(
       "base64url"
     );
     assert.equal(verifySession(`${bogus}.${bogus}`, deps), null);
-    const wrongAlias = Buffer.from(
-      JSON.stringify({ alias: "Z", iat: NOW }),
+    const badUid = Buffer.from(
+      JSON.stringify({ uid: "has spaces!", iat: NOW }),
       "utf8"
     ).toString("base64url");
-    // Correctly signed but semantically invalid alias must still fail.
-    const signed = sealSession({ alias: "A", iat: NOW }, deps);
+    // Correctly signed but semantically invalid uid must still fail.
+    const signed = sealSession(payload, deps);
     const [, goodSig] = signed.split(".");
-    assert.equal(verifySession(`${wrongAlias}.${goodSig}`, deps), null);
+    assert.equal(verifySession(`${badUid}.${goodSig}`, deps), null);
+  });
+
+  it("rejects a legacy 004 alias payload (correctly signed)", () => {
+    // Sessions issued before 005 carry { alias, iat } — they must be
+    // rejected so users re-login once after deploy (research R5).
+    const legacy = Buffer.from(
+      JSON.stringify({ alias: "A", iat: NOW }),
+      "utf8"
+    ).toString("base64url");
+    const signedLegacy = `${legacy}.${Buffer.from(
+      sealSession(payload, deps).split(".")[1],
+      "base64url"
+    ).toString("base64url")}`;
+    assert.equal(verifySession(signedLegacy, deps), null);
   });
 
   it("rejects a payload signed with a different secret", () => {

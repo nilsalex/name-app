@@ -1,20 +1,21 @@
-// Stateless signed session cookie (spec 004, data-model.md "Session",
-// research.md R3). Server-only: reading it needs next/headers cookies().
+// Stateless signed session cookie (spec 005, data-model.md "Session",
+// research.md R5). Server-only: reading it needs next/headers cookies().
 //
 // Format: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload)).
 // The browser cannot mint or alter a session — only integrity matters, the
-// payload (alias + issue time) is not sensitive (FR-008: no email inside).
+// payload (opaque uid + issue time) is not sensitive (FR-008/FR-012: no
+// email, no alias). Legacy 004 `{ alias }` payloads are rejected by the
+// shape check (one-time re-login after deploy, research R5/quickstart V5).
 // Session read happens at request time; callers must keep it inside a
 // Suspense boundary with cacheComponents enabled (plan.md Constitution I).
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { sessionSecret } from "./env";
-
-export type Alias = "A" | "B";
+import { isUserIdShape } from "./user-ids";
 
 export interface SessionPayload {
-  alias: Alias;
+  uid: string;
   /** Issue time, epoch ms. */
   iat: number;
 }
@@ -89,7 +90,7 @@ export function verifySession(
   const p = payload as Partial<SessionPayload> | null;
   if (
     !p ||
-    (p.alias !== "A" && p.alias !== "B") ||
+    !isUserIdShape(p.uid) ||
     typeof p.iat !== "number" ||
     !Number.isFinite(p.iat)
   ) {
@@ -100,11 +101,11 @@ export function verifySession(
   const ageMs = nowOf(deps?.now) - iat;
   if (ageMs < 0 || ageMs > SESSION_MAX_AGE_SECONDS * 1000) return null;
 
-  return { alias: p.alias, iat };
+  return { uid: p.uid, iat };
 }
 
-/** Reads the current alias from the request cookies, or null. */
-export async function getCurrentAlias(): Promise<Alias | null> {
+/** Reads the current user id from the request cookies, or null. */
+export async function getCurrentUid(): Promise<string | null> {
   const raw = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
-  return verifySession(raw)?.alias ?? null;
+  return verifySession(raw)?.uid ?? null;
 }
