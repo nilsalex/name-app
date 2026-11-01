@@ -100,9 +100,9 @@ Single Next.js App Router project at repo root: `app/`, `lib/`, `tests/unit/`, `
 
 **Purpose**: Gates, end-to-end validation, and constitutional PR hygiene
 
-- [ ] T014 Run full quickstart V1–V6 validation against the deployment, including V6 privacy cross-check: `/ranking` and `/winners` contain no user first names (baby names only), session cookie stays `{ uid, iat }`-shaped
-- [ ] T015 [P] Verify no unintended diff: `git diff --stat` shows changes only in `lib/google-verify.ts`, `lib/user-store.ts`, `app/actions.ts`, and the three test files (`tests/unit/google-verify.test.ts`, `tests/unit/user-store.test.ts`, `tests/integration/submit-auth.test.ts`) — any other touched file is re-reviewed against Constitution V
-- [ ] T016 Final gates + PR: `npm test` green, `npm run build` zero type/lint errors; open PR whose description states the exercised constitution principles (I–V pass, Free-Plan Budget unchanged — no new keys/dependencies/env variables) and how test-first (III) was satisfied (red tests in T003–T005/T012 → green in T006–T008/T013)
+- [X] T014 Run full quickstart V1–V6 validation against the deployment, including V6 privacy cross-check: `/ranking` and `/winners` contain no user first names (baby names only), session cookie stays `{ uid, iat }`-shaped
+- [X] T015 [P] Verify no unintended diff: `git diff --stat` shows changes only in `lib/google-verify.ts`, `lib/user-store.ts`, `app/actions.ts`, and the three test files (`tests/unit/google-verify.test.ts`, `tests/unit/user-store.test.ts`, `tests/integration/submit-auth.test.ts`) — any other touched file is re-reviewed against Constitution V
+- [X] T016 Final gates + PR: `npm test` green, `npm run build` zero type/lint errors; open PR whose description states the exercised constitution principles (I–V pass, Free-Plan Budget unchanged — no new keys/dependencies/env variables) and how test-first (III) was satisfied (red tests in T003–T005/T012 → green in T006–T008/T013)
 
 ---
 
