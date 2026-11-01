@@ -46,6 +46,15 @@ function upstashRedis(): Redis {
   return sharedClient;
 }
 
+/**
+ * Test seam (feature 012): replaces the module-private shared client with
+ * a fake (never used in production code paths — called only from
+ * app/fake-store.ts in mock mode). Passing null restores the real client.
+ */
+export function _setSharedClientForTests(fake: unknown): void {
+  sharedClient = (fake as Redis | null) ?? null;
+}
+
 /** Default backend: the Upstash Redis hash + counter (data-model.md). */
 function upstashBackend(): UserStoreBackend {
   const redis = upstashRedis;

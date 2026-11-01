@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# feature 012: .env.visual is the committed suite template (no secrets)
+!.env.visual
 
 # visual verification suite (feature 011)
 .env.visual
