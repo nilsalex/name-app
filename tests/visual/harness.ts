@@ -1,9 +1,9 @@
 // Shared harness for the visual verification suite (feature 011, contract
-// C1.2–C1.3, research R2/R4). Provides:
-//   - loadVisualEnv(): parse + validate .env.visual (fail fast, C3.2)
-//   - bootDevServer(): start `next dev` on the .env.visual port
-//   - signInAndSaveState(): real Google sign-in once per run → storage state
-//   - tryReuseAuthState(): reuse a warm sealed session (research R2)
+// C1.2–C1.3, research R2/R4; credential-free since feature 012):
+//   - bootDevServer(): start `next dev` on the .env.visual port with the
+//     mock-mode child env (loadSuiteEnv/buildServerEnv live in seed.ts)
+//   - localSignInAndSaveState(): one localhost POST to the suite's internal
+//     sign-in endpoint per run → storage state (feature 012, contract C6.5)
 //   - settle(): deterministic render/font settle protocol (research R4)
 //   - measure(): typed numeric layout readings in ONE page.evaluate
 //   - screenshot(): full-page capture into tests/visual/screenshots/ (C4.1)
@@ -12,85 +12,32 @@
 // CSS-module classes are addressed via substring attribute selectors
 // ([class*="nameButton"]) because CSS Modules hashes class names.
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import type { Browser, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { GEOMETRY_TOLERANCE_PX, PHONE_320, type Profile } from "./profiles";
+import { AUTH_STATE_PATH, SCREENSHOTS_DIR, REPO_ROOT } from "./harness-paths";
+import {
+  loadSuiteEnv,
+  buildServerEnv,
+  type VisualEnv,
+} from "./seed";
+
+export { loadSuiteEnv, buildServerEnv };
+export type { VisualEnv };
 
 // --- Paths ----------------------------------------------------------------
 
-export const REPO_ROOT = path.resolve(__dirname, "..", "..");
-export const ENV_FILE = path.join(REPO_ROOT, ".env.visual");
-export const AUTH_STATE_PATH = path.join(__dirname, ".auth-state.json");
-export const SCREENSHOTS_DIR = path.join(__dirname, "screenshots");
+export { REPO_ROOT, AUTH_STATE_PATH, SCREENSHOTS_DIR };
 
-/** Environment variables required by the suite (contract C1.2). */
-const REQUIRED_ENV_VARS = [
-  "UPSTASH_REDIS_REST_URL",
-  "UPSTASH_REDIS_REST_TOKEN",
-  "STORE_KEY_PREFIX",
-  "GOOGLE_CLIENT_ID",
-  "APPROVED_EMAILS",
-  "SESSION_SECRET",
-  "VISUAL_TEST_EMAIL",
-  "VISUAL_TEST_PASSWORD",
-] as const;
-
-export interface VisualEnv {
-  port: number;
-  baseUrl: string;
-  /** Raw variable map from .env.visual (secrets never logged). */
-  vars: Record<string, string>;
-}
+/** Environment variables required by the suite: see seed.ts (feature 012) —
+ *  mock-mode contract, loaded via loadSuiteEnv(). */
 
 /**
- * Parses .env.visual (gitignored) and validates every required variable,
- * failing fast with a message naming the missing variable (C1.2/C3.2).
- * Sets the parsed values into process.env so the dev server and all
- * helpers inherit them (process.env wins over any stray .env.local).
+ * Parses .env.visual (committed template) and validates every required
+ * variable (contract C1.2, feature 012 shape) — implemented in seed.ts;
+ * re-exported here for the harness's existing import surface.
  */
-export function loadVisualEnv(): VisualEnv {
-  if (!existsSync(ENV_FILE)) {
-    throw new Error(
-      "[visual-setup] Missing environment file .env.visual. " +
-        "Fix: create it with PORT=3111, UPSTASH_REDIS_REST_URL/TOKEN, " +
-        "STORE_KEY_PREFIX=namewahl-visual-test, GOOGLE_CLIENT_ID, " +
-        "APPROVED_EMAILS, SESSION_SECRET, VISUAL_TEST_EMAIL, " +
-        "VISUAL_TEST_PASSWORD (see quickstart.md A)."
-    );
-  }
-  const vars: Record<string, string> = {};
-  for (const line of readFileSync(ENV_FILE, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    vars[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
-  }
-  const missing = REQUIRED_ENV_VARS.filter(
-    (name) => !vars[name] || vars[name].trim() === ""
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `[visual-setup] Missing environment variable(s) in .env.visual: ${missing.join(", ")}. ` +
-        "Fix: fill in every required variable (see .env.example and quickstart.md)."
-    );
-  }
-  if (Buffer.byteLength(vars["SESSION_SECRET"], "utf8") < 32) {
-    throw new Error(
-      "[visual-setup] SESSION_SECRET in .env.visual is too short: it must be " +
-        "at least 32 bytes. Fix: generate one with `openssl rand -base64 32`."
-    );
-  }
-  const port = vars["PORT"] !== undefined && vars["PORT"] !== "" ? Number(vars["PORT"]) : 3111;
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw new Error(`[visual-setup] PORT in .env.visual is not a valid port: "${vars["PORT"]}".`);
-  }
-  for (const [key, value] of Object.entries(vars)) {
-    process.env[key] = value;
-  }
-  return { port, baseUrl: `http://127.0.0.1:${port}`, vars };
-}
 
 // --- Dev server (contract C1.3) -------------------------------------------
 
@@ -109,11 +56,14 @@ async function portResponds(baseUrl: string): Promise<boolean> {
 }
 
 /**
- * Boots `next dev` on the .env.visual port with the visual environment.
- * Fails fast (C3.2) when the port is already occupied — the suite owns
- * its port; a pre-existing server would point at unknown state.
+ * Boots `next dev` on the .env.visual port with the mock-mode child env
+ * (buildServerEnv, feature 012 — every key set explicitly so Next's
+ * .env.local auto-loading cannot leak personal credentials into the suite
+ * server, research R5). Fails fast (C3.2) when the port is already
+ * occupied — the suite owns its port; a pre-existing server would point at
+ * unknown state.
  */
-export async function bootDevServer(env: VisualEnv): Promise<void> {
+export async function bootDevServer(env: VisualEnv, childEnv?: NodeJS.ProcessEnv): Promise<void> {
   if (await portResponds(env.baseUrl)) {
     throw new Error(
       `[visual-setup] Port ${env.port} is already in use — something is listening on ${env.baseUrl}. ` +
@@ -127,7 +77,7 @@ export async function bootDevServer(env: VisualEnv): Promise<void> {
     ["node_modules/next/dist/bin/next", "dev", "--port", String(env.port), "--hostname", "127.0.0.1"],
     {
       cwd: REPO_ROOT,
-      env: { ...process.env, PORT: String(env.port) },
+      env: childEnv ?? buildServerEnv(env),
       stdio: ["ignore", "pipe", "pipe"],
     }
   );
@@ -161,129 +111,79 @@ export function shutdownDevServer(): void {
   serverProcess = null;
 }
 
-// --- Google sign-in (research R2) ------------------------------------------
+// --- Local sign-in (feature 012, research R2/R4, contract C6.5) ------------
 
-export const AUTH_STATE_EXISTS = (): boolean => existsSync(AUTH_STATE_PATH);
-
-function authStateFresh(): boolean {
-  if (!AUTH_STATE_EXISTS()) return false;
-  // Sessions live 30 days (lib/session.ts); reuse any state file from the
-  // last 24 h — a stale-but-signed state still validates via HTTP below.
-  const ageMs = Date.now() - statSync(AUTH_STATE_PATH).mtimeMs;
-  return ageMs < 24 * 60 * 60 * 1000;
-}
+/** The suite's internal sign-in endpoint (contract C6.4). */
+export const VISUAL_SIGNIN_ENDPOINT = "/internal/visual-signin";
 
 /**
- * Reuses an existing storage state if it still holds a valid signed-in
- * session (research R2: keep the Google session warm between runs).
- * Returns true when reuse succeeded.
+ * Signs the suite identity in ONCE per run via a single localhost POST to
+ * `{baseUrl}/internal/visual-signin` — the app's REAL sign-in path minus
+ * the Google verification hop (the endpoint calls the injected variant of
+ * the real `signIn` action, so `resolveUser` → `sealSession` →
+ * `cookies().set` all run for real) — and persists the session cookie as
+ * Playwright storage state at the existing AUTH_STATE_PATH.
+ *
+ * The POST doubles as the mock-boot canary (research R4): it performs a
+ * REAL store write + read through the fake, so any misconfiguration of the
+ * marker variable or the store injection surfaces here as a named setup
+ * error (C3.2) instead of silent layout-less scenarios later.
+ *
+ * Storage state is ALWAYS overwritten per boot (bounded overwrite — no
+ * freshness window, no reuse step; the 011-era Google GIS flow is removed).
  */
-export async function tryReuseAuthState(env: VisualEnv): Promise<boolean> {
-  if (!authStateFresh()) return false;
-  const res: globalThis.Response = await fetch(env.baseUrl, {
-    headers: { cookie: cookieHeaderFromState() },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) {
-    throw new Error(
-      "[visual-setup] Reused visual session could not reach the dev server. " +
-        "Fix: delete tests/visual/.auth-state.json and re-run to sign in again."
-    );
-  }
-  const html = await res.text();
-  // Signed-in page renders the vote area; signed-out renders the GIS login.
-  if (html.includes("nameButton") || html.includes("voteArea")) return true;
-  return false;
-}
-
-function cookieHeaderFromState(): string {
-  const state = JSON.parse(readFileSync(AUTH_STATE_PATH, "utf8")) as {
-    cookies: Array<{ name: string; value: string }>;
-  };
-  return state.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-}
-
-/**
- * Performs the real Google sign-in once per run through the GIS popup flow
- * (research R2), using VISUAL_TEST_EMAIL / VISUAL_TEST_PASSWORD, and saves
- * the sealed session as Playwright storage state for every scenario.
- * Set VISUAL_HEADED=1 to force a headed browser when Google challenges
- * headless Chromium (C1.4; the environment must have a display).
- */
-export async function signInAndSaveState(
-  browser: Browser,
-  env: VisualEnv
-): Promise<void> {
-  const email = requireProcessEnv("VISUAL_TEST_EMAIL");
-  const password = requireProcessEnv("VISUAL_TEST_PASSWORD");
-  const headed = process.env.VISUAL_HEADED === "1";
-  let context = await browser.newContext({
-    viewport: { width: PHONE_320.width, height: PHONE_320.height },
-  });
-  let page = await context.newPage();
+export async function localSignInAndSaveState(env: VisualEnv): Promise<void> {
+  let res: globalThis.Response;
   try {
-    await page.goto(env.baseUrl, { waitUntil: "domcontentloaded" });
-    // The GIS button lives in its own iframe; clicking the iframe opens the
-    // account-chooser popup.
-    const gsiButton = page.locator('iframe[src*="accounts.google.com"]').first();
-    await gsiButton.waitFor({ state: "visible", timeout: 30000 });
-    await gsiButton.click();
-    const popup = await page.context().waitForEvent("page", { timeout: 30000 });
-    await popup.waitForLoadState("domcontentloaded");
-
-    // Account chooser: enter the e-mail, then the password.
-    const emailInput = popup.locator('input[type="email"]');
-    if (await emailInput.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false)) {
-      await emailInput.fill(email);
-      await popup.keyboard.press("Enter");
-    }
-    const passwordInput = popup.locator('input[type="password"]:visible').first();
-    await passwordInput.waitFor({ state: "visible", timeout: 30000 });
-    await passwordInput.fill(password);
-    await popup.keyboard.press("Enter");
-
-    // Possible extra consent step ("I agree" / "Weiter") — best effort.
-    for (let i = 0; i < 3; i++) {
-      const agree = popup.locator(
-        'button:has-text("I agree"), button:has-text("Continue"), ' +
-          'button:has-text("Ich stimme zu"), button:has-text("Weiter")'
-      );
-      if (!(await agree.first().isVisible().catch(() => false))) break;
-      await agree.first().click();
-      await popup.waitForTimeout(1500);
-    }
-
-    // Signed-in: the parent page swaps the login screen for the vote screen.
-    await page
-      .locator('[class*="voteArea"], [class*="signOut"]')
-      .first()
-      .waitFor({ state: "visible", timeout: 30000 });
-
-    mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
-    await context.storageState({ path: AUTH_STATE_PATH });
+    res = await fetch(`${env.baseUrl}${VISUAL_SIGNIN_ENDPOINT}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(15000),
+    });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `[visual-setup] Google sign-in failed (${headed ? "headed" : "headless"} browser). ` +
-        `Google sometimes challenges headless Chromium — re-run with VISUAL_HEADED=1 ` +
-        `(a local display is required). Check VISUAL_TEST_EMAIL / VISUAL_TEST_PASSWORD ` +
-        `in .env.visual and that the identity is listed in APPROVED_EMAILS. ` +
-        `Detail: ${detail}`
+      `[visual-setup] Internal sign-in endpoint unreachable at ` +
+        `${env.baseUrl}${VISUAL_SIGNIN_ENDPOINT} — the mock boot canary failed. ` +
+        `Fix: check that the dev server booted with VISUAL_MOCK_EXTERNAL=1 in its ` +
+        `environment (the marker enables the endpoint). Detail: ${detail}`
     );
-  } finally {
-    await context.close();
   }
-  void page;
-}
-
-function requireProcessEnv(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value.trim() === "") {
+  const setCookie = res.headers.get("set-cookie");
+  if (!res.ok || setCookie === null) {
     throw new Error(
-      `[visual-setup] Missing environment variable ${name} (expected in .env.visual).`
+      `[visual-setup] Internal sign-in endpoint returned ${res.status} ` +
+        `(expected 200 + Set-Cookie) at ${env.baseUrl}${VISUAL_SIGNIN_ENDPOINT}. ` +
+        `Fix: 404 means the dev server env lacks VISUAL_MOCK_EXTERNAL=1 — check ` +
+        `buildServerEnv() in tests/visual/seed.ts and the committed .env.visual.`
     );
   }
-  return value.trim();
+  // Persist the session as Playwright storage state (same mechanism 011
+  // used for the Google session; scenarios load it unchanged).
+  const cookieMatch = /([^=]+)=([^;]*)/.exec(setCookie);
+  if (cookieMatch === null) {
+    throw new Error(
+      `[visual-setup] Internal sign-in endpoint returned an unparsable Set-Cookie header. ` +
+        `Detail: ${setCookie.slice(0, 40)}…`
+    );
+  }
+  const state = {
+    cookies: [
+      {
+        name: cookieMatch[1],
+        value: cookieMatch[2],
+        domain: "127.0.0.1",
+        path: "/",
+        expires: -1,
+        httpOnly: true,
+        secure: false,
+        sameSite: "Lax",
+      },
+    ],
+    origins: [],
+  };
+  mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(AUTH_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
 // --- Settle protocol (research R4) -----------------------------------------

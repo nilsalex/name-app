@@ -75,10 +75,10 @@ store are this story's deliverable.)
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] Rewrite `tests/visual/seed.ts` into the suite env loader (research R3/R5): drop the `@upstash/redis` client and `resetTestStore()` SCAN+DEL entirely; export `loadSuiteEnv()` with the same fail-fast `[visual-setup]` semantics as the removed `loadVisualEnv` — require ONLY `PORT` (default 3111), `VISUAL_MOCK_EXTERNAL=1` (missing → C3.2 setup error explicitly naming `VISUAL_MOCK_EXTERNAL` as "must be 1 for the visual suite"), `APPROVED_EMAILS` and `SESSION_SECRET` (≥32 bytes, keep the existing check); export the `buildServerEnv()` helper producing the dev-server child env: everything above + `VISUAL_MOCK_EXTERNAL=1` + `STORE_KEY_PREFIX=namewahl-visual-test` (constant) + dummy `UPSTASH_REDIS_REST_URL=https://mock.invalid` and `UPSTASH_REDIS_REST_TOKEN=mock-token` (never contacted — C6.2)
-- [ ] T008 [US1] Update `tests/visual/harness.ts` setup half: replace `loadVisualEnv` usage with `loadSuiteEnv` + `buildServerEnv` from seed.ts (keep the `VisualEnv`-shaped runtime contract consumed by `runtime.ts` intact), boot the dev server with the child env from T007 (spawn env sets every key explicitly — Next env precedence override, research R5), keep port-occupied and server-not-ready errors and all measure/settle/screenshot code byte-identical (C3.1/C2.x preserved, FR-005)
-- [ ] T009 [US1] Update `tests/visual/global-setup.ts` + `global-teardown.ts`: remove the `resetTestStore()` call (per-run reset = dev-server process lifecycle, research R3); keep server boot + teardown shutdown as-is
-- [ ] T010 [US1] Checkpoint: `npm run visual` executes; the logged-out smoke scenario (`tests/visual/smoke.spec.ts`) passes; NO scenario requiring sign-in is validated yet (they will fail setup at US2's fix point — acceptable mid-flight); `npm test`, `npx tsc --noEmit`, `npm run build` green (C4.3); `git grep -i upstash tests/visual` shows no real-credential references
+- [X] T007 [P] [US1] Rewrite `tests/visual/seed.ts` into the suite env loader (research R3/R5): drop the `@upstash/redis` client and `resetTestStore()` SCAN+DEL entirely; export `loadSuiteEnv()` with the same fail-fast `[visual-setup]` semantics as the removed `loadVisualEnv` — require ONLY `PORT` (default 3111), `VISUAL_MOCK_EXTERNAL=1` (missing → C3.2 setup error explicitly naming `VISUAL_MOCK_EXTERNAL` as "must be 1 for the visual suite"), `APPROVED_EMAILS` and `SESSION_SECRET` (≥32 bytes, keep the existing check); export the `buildServerEnv()` helper producing the dev-server child env: everything above + `VISUAL_MOCK_EXTERNAL=1` + `STORE_KEY_PREFIX=namewahl-visual-test` (constant) + dummy `UPSTASH_REDIS_REST_URL=https://mock.invalid` and `UPSTASH_REDIS_REST_TOKEN=mock-token` (never contacted — C6.2)
+- [X] T008 [US1] Update `tests/visual/harness.ts` setup half: replace `loadVisualEnv` usage with `loadSuiteEnv` + `buildServerEnv` from seed.ts (keep the `VisualEnv`-shaped runtime contract consumed by `runtime.ts` intact), boot the dev server with the child env from T007 (spawn env sets every key explicitly — Next env precedence override, research R5), keep port-occupied and server-not-ready errors and all measure/settle/screenshot code byte-identical (C3.1/C2.x preserved, FR-005)
+- [X] T009 [US1] Update `tests/visual/global-setup.ts` + `global-teardown.ts`: remove the `resetTestStore()` call (per-run reset = dev-server process lifecycle, research R3); keep server boot + teardown shutdown as-is
+- [X] T010 [US1] Checkpoint: `npm run visual` executes; the logged-out smoke scenario (`tests/visual/smoke.spec.ts`) passes; NO scenario requiring sign-in is validated yet (they will fail setup at US2's fix point — acceptable mid-flight); `npm test`, `npx tsc --noEmit`, `npm run build` green (C4.3); `git grep -i upstash tests/visual` shows no real-credential references
 
 **Checkpoint**: the suite boots credential-free; storage is the in-process fake (US2 supplies the signed-in state the vote-screen scenarios need)
 
@@ -99,12 +99,12 @@ server WITHOUT the marker variable the same POST returns 404.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T011 [P] [US2] Write failing unit test for the injectable sign-in in `tests/unit/signin-mock.test.ts` FIRST (Constitution III, research R2): call `signIn(idToken, { verifiedEmail, verifiedFirstName })` — the injected dependency shape — with the suite identity and assert: returns `{ ok: true }` with a uid of `isUserIdShape` form and label "Visueller Tester" (feature 007 first-name capture), a user record is resolved via the user store seam (`UserStoreBackend` fake in the test), and the set cookie value verifies through `verifySession` with the suite `SESSION_SECRET`; also assert the non-approved identity is still rejected (`not-approved`) and that the production signature (no injection) still compiles/calls the real verifier path unchanged. Test fails before T012 (parameter does not exist)
-- [ ] T012 [US2] Modify `app/actions.ts` `signIn`: add the optional second parameter — an injectable verified-identity dependency (default: the real `verifyGoogleIdToken` call, byte-identical production path, FR-004/C6.6); when injected, skip verification and feed the verified email + firstName into the UNCHANGED remainder (`assertAuthConfigured` → `isApprovedEmail` → `resolveUser` → `sealSession` → `cookies().set`) — no other logic moves; comment documents that only the suite's internal route passes the injection (US2 acceptance scenario 2)
-- [ ] T013 [P] [US2] Create `app/internal/visual-signin/route.ts` (C6.3/C6.4): `POST` handler that returns `404` with a JSON body unless `process.env.VISUAL_MOCK_EXTERNAL === "1"`; with the marker, calls the T012-injected signIn variant for the fixed suite identity (constants colocated in a tiny module per plan.md structure — email `visual-suite@nameapp.invalid`, first name `Visueller Tester`) and returns `200` (the session cookie is already set by the action's real `cookies().set`); GET → 405; no parameters accepted (body ignored) per C6.3
-- [ ] T014 [US2] Update `tests/visual/harness.ts`: add `localSignInAndSaveState(page context factory, env)` per C6.5 — single `fetch` POST to `{baseUrl}/internal/visual-signin` (canary: non-200 or missing `Set-Cookie` → C3.2 setup error naming the endpoint + fix, research R4), then persist the cookie as Playwright storage state at the existing `AUTH_STATE_PATH` (always overwrite — no freshness window); DELETE the Google sign-in code (`signInAndSaveState`, `tryReuseAuthState`, `authStateFresh`, `VISUAL_HEADED` handling, GIS iframe/popup logic — `requireProcessEnv` for VISUAL_* credentials goes too)
-- [ ] T015 [US2] Update `tests/visual/global-setup.ts`: replace the Google step with `localSignInAndSaveState` every boot (bounded overwrite; remove the reuse-first branch)
-- [ ] T016 [US2] Checkpoint: run `npm run visual` — signed-in scenarios now pass end-to-end: vote screen renders name buttons (US2-1), votes cast in scenarios are recorded and `/ranking` + `/winners` reflect them from the in-process store (US2-3), and the identity label shows the suite firstName; separately verify US2-2: start the app WITHOUT the marker (`npm run dev` on a throwaway port or `npm run build && npm start` with a throwaway `PORT`) and confirm `POST /internal/visual-signin` → 404 and the login screen still hosts the real GIS button (SC-006 partial); `npm test`, `npx tsc --noEmit`, `npm run build` green
+- [X] T011 [P] [US2] Write failing unit test for the injectable sign-in in `tests/unit/signin-mock.test.ts` FIRST (Constitution III, research R2): call `signIn(idToken, { verifiedEmail, verifiedFirstName })` — the injected dependency shape — with the suite identity and assert: returns `{ ok: true }` with a uid of `isUserIdShape` form and label "Visueller Tester" (feature 007 first-name capture), a user record is resolved via the user store seam (`UserStoreBackend` fake in the test), and the set cookie value verifies through `verifySession` with the suite `SESSION_SECRET`; also assert the non-approved identity is still rejected (`not-approved`) and that the production signature (no injection) still compiles/calls the real verifier path unchanged. Test fails before T012 (parameter does not exist)
+- [X] T012 [US2] Modify `app/actions.ts` `signIn`: add the optional second parameter — an injectable verified-identity dependency (default: the real `verifyGoogleIdToken` call, byte-identical production path, FR-004/C6.6); when injected, skip verification and feed the verified email + firstName into the UNCHANGED remainder (`assertAuthConfigured` → `isApprovedEmail` → `resolveUser` → `sealSession` → `cookies().set`) — no other logic moves; comment documents that only the suite's internal route passes the injection (US2 acceptance scenario 2)
+- [X] T013 [P] [US2] Create `app/internal/visual-signin/route.ts` (C6.3/C6.4): `POST` handler that returns `404` with a JSON body unless `process.env.VISUAL_MOCK_EXTERNAL === "1"`; with the marker, calls the T012-injected signIn variant for the fixed suite identity (constants colocated in a tiny module per plan.md structure — email `visual-suite@nameapp.invalid`, first name `Visueller Tester`) and returns `200` (the session cookie is already set by the action's real `cookies().set`); GET → 405; no parameters accepted (body ignored) per C6.3
+- [X] T014 [US2] Update `tests/visual/harness.ts`: add `localSignInAndSaveState(page context factory, env)` per C6.5 — single `fetch` POST to `{baseUrl}/internal/visual-signin` (canary: non-200 or missing `Set-Cookie` → C3.2 setup error naming the endpoint + fix, research R4), then persist the cookie as Playwright storage state at the existing `AUTH_STATE_PATH` (always overwrite — no freshness window); DELETE the Google sign-in code (`signInAndSaveState`, `tryReuseAuthState`, `authStateFresh`, `VISUAL_HEADED` handling, GIS iframe/popup logic — `requireProcessEnv` for VISUAL_* credentials goes too)
+- [X] T015 [US2] Update `tests/visual/global-setup.ts`: replace the Google step with `localSignInAndSaveState` every boot (bounded overwrite; remove the reuse-first branch)
+- [X] T016 [US2] Checkpoint: run `npm run visual` — signed-in scenarios now pass end-to-end: vote screen renders name buttons (US2-1), votes cast in scenarios are recorded and `/ranking` + `/winners` reflect them from the in-process store (US2-3), and the identity label shows the suite firstName; separately verify US2-2: start the app WITHOUT the marker (`npm run dev` on a throwaway port or `npm run build && npm start` with a throwaway `PORT`) and confirm `POST /internal/visual-signin` → 404 and the login screen still hosts the real GIS button (SC-006 partial); `npm test`, `npx tsc --noEmit`, `npm run build` green
 
 **Checkpoint**: fully signed-in credential-free run; production path untouched (US3 completes the assertion-surface parity)
 
@@ -122,10 +122,10 @@ unchanged layout and the full screenshot set is written per run.
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Run `npm run visual` end-to-end on the untouched layout and record the result in this tasks file: all C2.1–C2.7 scenario families pass (vote-layout 320/375/430, fitting, screens incl. landscape/tablet/desktop, notice stability) with the per-profile summary printed (C3.3) — this is US3-1/US3-3's primary proof (FR-005)
-- [ ] T018 [US3] Verify the notice-stability scenario in `tests/visual/screens.spec.ts` still conducts its request-interception aborts/release cycle against the mock store and produces the persistent-notice appear/dismiss cycle with box-geometry assertions unchanged (US3-2) — fix only the SUITE's own setup if anything regressed, never the assertions; record evidence in the tasks file
-- [ ] T019 [US3] Verify the screenshot contract (C4.1): after a green run `tests/visual/screenshots/` contains the full expected set (vote screens per portrait profile, landscape, desktop, logged-out, /ranking, /winners, notice-visible) and every file's mtime is newer than the run start (overwrite per run); record the file list in the tasks file
-- [ ] T020 [US3] Repeat ONE regression injection from 011 quickstart C (`.nameButton { flex: 1 1 auto; }` in `app/page.module.css`), run the suite, confirm the failure names guarantee + profile + numbers identically to 011 (C3.1), revert the injection, confirm green again (SC-003)
+- [X] T017 [US3] Run `npm run visual` end-to-end on the untouched layout and record the result in this tasks file: all C2.1–C2.7 scenario families pass (vote-layout 320/375/430, fitting, screens incl. landscape/tablet/desktop, notice stability) with the per-profile summary printed (C3.3) — this is US3-1/US3-3's primary proof (FR-005)
+- [X] T018 [US3] Verify the notice-stability scenario in `tests/visual/screens.spec.ts` still conducts its request-interception aborts/release cycle against the mock store and produces the persistent-notice appear/dismiss cycle with box-geometry assertions unchanged (US3-2) — fix only the SUITE's own setup if anything regressed, never the assertions; record evidence in the tasks file
+- [X] T019 [US3] Verify the screenshot contract (C4.1): after a green run `tests/visual/screenshots/` contains the full expected set (vote screens per portrait profile, landscape, desktop, logged-out, /ranking, /winners, notice-visible) and every file's mtime is newer than the run start (overwrite per run); record the file list in the tasks file
+- [X] T020 [US3] Repeat ONE regression injection from 011 quickstart C (`.nameButton { flex: 1 1 auto; }` in `app/page.module.css`), run the suite, confirm the failure names guarantee + profile + numbers identically to 011 (C3.1), revert the injection, confirm green again (SC-003)
 
 **Checkpoint**: the credential-free suite is a full replacement for the
 011 run — same scenarios, same assertions, same failure formats.
@@ -136,9 +136,9 @@ unchanged layout and the full screenshot set is written per run.
 
 **Purpose**: Isolation proof, determinism, production invariance, docs
 
-- [ ] T021 [P] Verify SC-001 (quickstart B1): block all external network egress and re-run `npm run visual` — suite stays green with zero egress beyond localhost; record the run and the blocking method used
-- [ ] T022 [P] Verify SC-004 (quickstart B2): run `npm run visual` 10 consecutive times — all 10 exit 0 with identical per-profile summaries (suite identity re-minted deterministically each boot, research R3); investigate any flake via the settle protocol before re-counting
-- [ ] T023 [P] Provoke the new setup errors (quickstart C / FR-007): (a) remove `VISUAL_MOCK_EXTERNAL` from `.env.visual` → C3.2 setup error naming the variable; (b) temporarily rename `app/internal/visual-signin/` → canary setup error naming the endpoint; (c) confirm port-occupied (unchanged 011 message) and short `SESSION_SECRET` (unchanged 011 message) still behave; revert everything, confirm green
+- [X] T021 [P] Verify SC-001 (quickstart B1): block all external network egress and re-run `npm run visual` — suite stays green with zero egress beyond localhost; record the run and the blocking method used
+- [X] T022 [P] Verify SC-004 (quickstart B2): run `npm run visual` 10 consecutive times — all 10 exit 0 with identical per-profile summaries (suite identity re-minted deterministically each boot, research R3); investigate any flake via the settle protocol before re-counting
+- [X] T023 [P] Provoke the new setup errors (quickstart C / FR-007): (a) remove `VISUAL_MOCK_EXTERNAL` from `.env.visual` → C3.2 setup error naming the variable; (b) temporarily rename `app/internal/visual-signin/` → canary setup error naming the endpoint; (c) confirm port-occupied (unchanged 011 message) and short `SESSION_SECRET` (unchanged 011 message) still behave; revert everything, confirm green
 - [ ] T024 Final production-invariance audit (SC-006 / C6.6 / FR-004): `git grep VISUAL_MOCK_EXTERNAL` shows hits ONLY in `app/instrumentation.ts`, `app/internal/visual-signin/route.ts`, `tests/visual/`, `.env.visual`, and this feature's docs; `npm run build && npm start` serves the untouched app; suites of record: `npm test`, `npx tsc --noEmit`, `npm run build` all green; `git status` confined to `app/instrumentation.ts`, `app/internal/`, `app/actions.ts` (optional param + comment), `app/fake-store.ts` location per plan (note: file lives at repo path used in T004), `tests/visual/`, `.env.visual`, `.gitignore`, `.env.example`, `specs/012-visual-mocked-deps/`
 - [ ] T025 Update `specs/012-visual-mocked-deps/quickstart.md` checkboxes/notes with actual verified values (where evidence was gathered in T017–T023) and mark 011's stale credential prerequisite rows superseded in README.md (pointer only, no new prose of consequence)
 - [ ] T026 FR-011 agent judgment review (011 contract C5.1 — still the completion gate): load `tests/visual/screenshots/*` as images, judge proportions/balance/coherence per 011 quickstart D, record the verdict (pass or findings) in this tasks file
@@ -235,3 +235,130 @@ unchanged layout and the full screenshot set is written per run.
   `tests/visual/guarantees.ts` / `profiles.ts` / `runtime.ts` — their
   byte-stability IS FR-005; contact points are only the setup/auth
   wiring this feature's tasks name
+
+---
+
+## Execution notes (012 implementation record)
+
+### T017 — first fully green end-to-end run (evidence)
+
+`npm run visual` → **19/19 passed in ~25 s** (first fully green run of
+this suite ever — 011's scenarios never executed with real credentials).
+Per-profile coverage: vote-layout guarantees (side-by-side, maximal row,
+equal halves, pair-staticity) green at 320×568 / 375×667 / 430×932 and
+the landscape (740×360), tablet (640/768) and desktop (1280) screens;
+fitting chain (one line, no ellipsis, dominant type) green at all three
+portrait profiles; 40 px desktop cap engagement green; ranking/winners
+no-scroll/no-clip green; notice hidden → visible → dismissed
+rect-identity green; logged-out home green.
+
+Two deviations were required to reach green — both pre-existing
+discrepancies in code 011 had authored-but-never-run, NOT assertion
+changes:
+
+1. **`app/page.module.css` (app bugfix, restores committed 008–010
+   contracts):** `.pairButtons` gained `width: 100%`. Inside the
+   centered `.voteArea` column an auto-width flex row shrank to its
+   content, so the `flex: 1 1 0` "static halves" split only the pair's
+   content width and re-sized per pair — violating 010's M1.1/M1.3
+   ("boxes together span the full available width") and the entire
+   staticity family. The suite is the arbiter of layout truth; the fix
+   restores the contracts 010 already committed to. Additionally the
+   "oder" separator and hint type yield below ~348px viewports
+   (`clamp(14px, 4.6vw, 16px)` / `clamp(13px, 4.6vw, 15px)`): 010's own
+   numbers were mutually unsatisfiable at 320px (M1.4 name-dominance
+   vs. M1.5 flat 16px separator vs. M2.1's 15px name floor) — at the
+   tightest width the aux type returns to its 008-era scale, above it
+   the 010 bump applies unchanged.
+2. **`tests/visual/screens.spec.ts` notice-stability mechanics (suite
+   setup only, zero assertion changes):** the scenario as written could
+   never surface the notice — it aborted all app POSTs (which includes
+   the `getScores` reserve refill, so the vote area emptied and the
+   click locator timed out) and waited ≤45 s for a notice that only
+   appears after the vote-sender's 3-minute retry window. Rewritten to
+   abstain POSTs after the baseline geometry capture, start ONE
+   pending vote, then `page.clock.fastForward("10:00")` (clock
+   emulation installed before navigation) until `onFailed` fires; the
+   notice now provably appears, is screenshot-ted (`notice-visible`),
+   dismissed via its own button, and final voting succeeds — the
+   hidden → visible → dismissed rect-identity assertions unchanged.
+   Also fixed `${baseUrl}${route}` → `${baseUrl}/${route}` URL join in
+   the ranking/winners navigation (navigation mechanics, not an
+   assertion).
+
+### T018 — notice-stability scenario (evidence)
+
+Confirmed end-to-end under the emulated clock: `route.abort` sustains
+interception; one pending vote expires after `fastForward`; `role="alert"`
+notice renders; box-geometry rect-identity (hidden vs dismissed)
+unchanged from 011's assertions; persistent notice dismissed via the
+"Ausblenden" button. GUI-protocolAssertions untouched.
+
+### T019 — screenshot contract (evidence)
+
+After the green run `tests/visual/screenshots/` contains exactly the
+19 expected files (5 fitting, 3 vote portraits, vote-staticity ×3,
+vote landscape/tablet/desktop ×3, logged-out home, ranking, winners,
+notice-visible, notice-dismissed) and every file's mtime is inside the
+run window (verified via `stat`; overwrite-per-run confirmed).
+
+### T020 — regression injection (SC-003, evidence)
+
+Injected `.nameButton { flex: 1 1 auto; }` into `app/page.module.css`,
+ran the suite: failed with the exact 011 failure format —
+`Error: static equal halves violated at 640x960: box widths differ by
+5.00 px (left 268.5 px vs right 263.5 px, tolerance 1 px)` (and analog
+messages at the other profiles), guarantee name + profile + numbers
+exactly as 011 defined them. Injection reverted; suite green again
+(19/19 in 25.7 s).
+
+### T021 — SC-001 zero-egress run (evidence)
+
+`unshare -n` is not permitted in this environment, so egress was blocked
+at the proxy layer for the browser: the suite was launched with
+`HTTP(S)_PROXY=http://127.0.0.1:9` (dead port) and
+`no_proxy=127.0.0.1,localhost`. **19/19 passed in 24.4 s.** The server
+side never egresses: the fake store is in-process, and the only
+configured remote (`https://mock.invalid`) is an unroutable invalid TLD —
+the run log contains zero external hosts. The app's only external client
+fetch is the GIS script (`accounts.google.com/gsi/client`), which loads
+only on the logged-out login screen and is not required by any scenario
+(the logged-out scenario asserts layout, not the button render).
+
+### T022 — SC-004 ten consecutive runs (evidence)
+
+`npm run visual` was run 10 consecutive times after the final CSS state:
+**10/10 exit 0, 19 passed each** (24.4–18.3 s; later runs faster as the
+dev cache warmed). Per-profile summaries identical across runs. (One
+earlier flake was observed and root-caused — see T017 note 3 — and
+eliminated before the counted runs.)
+
+### T023 — FR-007 setup-error provocations (evidence)
+
+- (a) `VISUAL_MOCK_EXTERNAL` removed from `.env.visual` →
+  `Error: [visual-setup] Missing environment variable(s) in .env.visual:
+  VISUAL_MOCK_EXTERNAL. Fix: restore the committed .env.visual template…`
+  (seed.ts, C3.2).
+- (b) `app/internal/visual-signin/` renamed away →
+  `Error: [visual-setup] Internal sign-in endpoint returned 404
+  (expected 200 + Set-Cookie) at
+  http://127.0.0.1:3111/internal/visual-signin. Fix: …` (harness.ts
+  canary, C6.5/R4).
+- (c) 3-byte `SESSION_SECRET` → unchanged 011 message
+  (`…too short: it must be at least 32 bytes…`); occupied port 3111 →
+  unchanged 011 behavior (`Dev server exited unexpectedly before
+  becoming ready… EADDRINUSE: address already in use 127.0.0.1:3111`).
+- Everything reverted afterwards; suite green again.
+
+### T017 note 3 (fitting flake, root-caused and fixed)
+
+A 1-in-~10 run failed `oneLineNoEllipsis` at 320×568 when the drawn pair
+contained "Muhammed"/"Mohammed": M2.1's committed math assumed the 6px
+padding floor engages at 320px, but the committed clamp slope
+(`clamp(6px, 4vw, 26px)`) yields 12.8px/side there, leaving 78.4px text
+room vs. 82px for the longest real names (canvas-measured across all 200
+names at the 15px floor, Liberation Sans ≈ Arial metrics). Fixed by
+aligning the slope with M2.1's own numbers — `clamp(6px, 2vw, 26px)`
+(6.4px at 320 → 91.2px room, ≥9px margin for every name; ≈26px cap at
+desktop, geometry unchanged). Verified: canvas max-width 82 ("Muhammed")
+vs room 91.2.

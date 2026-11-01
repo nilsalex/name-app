@@ -15,5 +15,5 @@ export async function register(): Promise<void> {
   if (process.env.VISUAL_MOCK_EXTERNAL !== "1") return;
   // Documented side-effect-import pattern: the module wires the fake store
   // into lib/store.ts / lib/user-store.ts at import time.
-  await import("./fake-store").then((m) => m.installFakeStore());
+  await import("./app/fake-store").then((m) => m.installFakeStore());
 }

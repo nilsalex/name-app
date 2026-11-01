@@ -26,6 +26,32 @@ import { Redis, type Requester, type UpstashRequest, type UpstashResponse } from
 import { _setClientForTests } from "../lib/store";
 import * as userStoreModule from "../lib/user-store";
 
+/**
+ * Process-wide bridge slot for the fake client (webpack dev reality):
+ * in `next dev`, EACH server entry bundle (instrumentation, every route)
+ * carries its OWN copy of lib/store — a seam set in the instrumentation
+ * bundle's copy is invisible to route bundles. Storing the client on
+ * globalThis and consuming it lazily from every bundle's `redis()`-style
+ * getter makes the single instance visible process-wide (same pattern the
+ * Next.js docs recommend for Prisma singletons). Slot name is prefixed to
+ * avoid collisions with anything else on global.
+ */
+const FAKE_CLIENT_SLOT = "__namewahl_visual_fake_client__";
+
+/** Publishes the fake client process-wide (called by installFakeStore). */
+function publishFakeClient(client: unknown): void {
+  (globalThis as Record<string, unknown>)[FAKE_CLIENT_SLOT] = client;
+}
+
+/**
+ * Consumes the published fake client (called from lib/store.ts and
+ * lib/user-store.ts lazily, in every bundle). Returns undefined when not
+ * in mock mode — production never has the slot set.
+ */
+export function consumeFakeClient(): unknown | undefined {
+  return (globalThis as Record<string, unknown | undefined>)[FAKE_CLIENT_SLOT];
+}
+
 /** Wire command: verb + args, as serialized by the SDK (all strings/numbers). */
 type WireCommand = unknown[];
 
@@ -218,6 +244,9 @@ export function createFakeRequester(): Requester {
  */
 export function installFakeStore(): void {
   const client = redisOverFake();
+  // Process-wide publish FIRST (route bundles read the slot lazily), then
+  // the direct seams for the instrumentation bundle's own module copies.
+  publishFakeClient(client);
   _setClientForTests(client);
   const { _setSharedClientForTests } = userStoreSeams();
   _setSharedClientForTests(client);

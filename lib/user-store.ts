@@ -42,6 +42,21 @@ let sharedClient: Redis | null = null;
 
 /** Shared client so findUserById uses the same connection as the backend. */
 function upstashRedis(): Redis {
+  // Mock-mode hook (feature 012): consume the globalThis-published fake
+  // client lazily so every webpack bundle copy shares the one instance
+  // (app/fake-store.ts; production never has the slot set).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { consumeFakeClient } = require("../app/fake-store") as {
+      consumeFakeClient: () => unknown | undefined;
+    };
+    const fake = consumeFakeClient();
+    if (fake !== undefined) {
+      sharedClient = fake as Redis;
+    }
+  } catch {
+    // Module unavailable outside mock mode — keep the real client path.
+  }
   sharedClient ??= new Redis({ url: upstashUrl(), token: upstashToken() });
   return sharedClient;
 }

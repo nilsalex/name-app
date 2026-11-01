@@ -1,35 +1,23 @@
-// Global setup for the visual suite (feature 011, T008):
-//   1. load .env.visual (fail fast on missing variables, contract C1.2/C3.2)
-//   2. reset the namewahl-visual-test:* namespace (research R3, SC-004)
-//   3. boot the dev server on the .env.visual port (contract C1.3)
-//   4. sign in once via the real Google flow (research R2) and cache the
-//      storage state for the shared worker
+// Global setup for the visual suite (feature 012, tasks T009/T015):
+//   1. load .env.visual via the suite env loader (fail fast, C1.2/C3.2)
+//   2. boot the dev server on the .env.visual port with the mock-mode
+//      child env (contract C1.3, research R5) — the in-memory fake store
+//      comes up with it; per-run reset IS this boot (research R3), so the
+//      011-era resetTestStore() step is gone
+//   3. sign in via ONE localhost POST to /internal/visual-signin and save
+//      the storage state — ALWAYS per boot (bounded overwrite; no Google,
+//      no reuse step, contract C6.5)
 // Playwright contract: this module exports a single default function.
-import { chromium } from "@playwright/test";
 import {
   bootDevServer,
-  loadVisualEnv,
-  signInAndSaveState,
-  tryReuseAuthState,
-  type VisualEnv,
+  localSignInAndSaveState,
 } from "./harness";
-import { resetTestStore } from "./seed";
+import { loadSuiteEnv } from "./seed";
 import { setVisualEnv } from "./runtime";
 
 export default async function globalSetup(): Promise<void> {
-  const env: VisualEnv = loadVisualEnv();
+  const env = loadSuiteEnv();
   setVisualEnv(env);
-  await resetTestStore();
   await bootDevServer(env);
-
-  if (!(await tryReuseAuthState(env))) {
-    const browser = await chromium.launch({
-      headless: process.env.VISUAL_HEADED !== "1",
-    });
-    try {
-      await signInAndSaveState(browser, env);
-    } finally {
-      await browser.close();
-    }
-  }
+  await localSignInAndSaveState(env);
 }

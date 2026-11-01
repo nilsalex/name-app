@@ -3,6 +3,27 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // Production builds use Turbopack (default in Next 16). The webpack
+  // hook below only applies to `next dev --webpack`, which the visual
+  // suite's dev server uses (feature 012). The empty turbopack block
+  // declares that coexistence explicitly instead of erroring the build.
+  turbopack: {},
+  // The fake Redis client (feature 012, visual suite) is bundled into the
+  // instrumentation entry, whose webpack "instrument" layer cannot bundle
+  // node: builtins like `node:crypto` (UnhandledSchemeError). Externalize
+  // node: builtins for server-side compilations; harmless for the regular
+  // route bundles (they already externalize them) and skipped for the client.
+  webpack(config, { isServer }: { isServer: boolean }) {
+    if (isServer) {
+      config.externals.push(async ({ request }: { request?: string | boolean }) => {
+        if (typeof request === "string" && /^node:/.test(request)) {
+          return `commonjs ${request}`;
+        }
+        return undefined;
+      });
+    }
+    return config;
+  },
   async headers() {
     return [
       {

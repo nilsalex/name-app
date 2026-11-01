@@ -18,7 +18,11 @@
 }
 
 .hint {
-  font-size: 15px;
+  /* Bugfix surfaced by the visual suite (012): FR-004/M1.4 dominance —
+     the hint must not meet the name type at the 15px clamp floor
+     (320–348px). Yields down to 13px at tight widths, original 15px
+     restored from ~326px up. */
+  font-size: clamp(13px, 4.6vw, 15px);
   opacity: 0.7;
 }
 
@@ -32,6 +36,14 @@
      geometry no longer re-derives per pair (contract S1.1/S1.2). */
   flex-wrap: nowrap;
   justify-content: center;
+  /* Bugfix surfaced by the visual suite (012): the row must span the full
+     width available to the voting area (010 FR/SC "boxes together span the
+     full available width", 010 SC-4 ≥95%). Inside the centered .voteArea
+     column an auto-width flex item shrinks to its content, so flex 1 1 0
+     halves only split the widest pair content and re-sized per pair.
+     width: 100% pins the row to the voteArea content box, making the
+     static halves truly content-independent. */
+  width: 100%;
 }
 
 .nameButton {
@@ -57,7 +69,15 @@
      floor lowered 8 → 6px: with the font clamp below, "Maximilian"/
      "Konstantin" at 320px are ≈87px of text in 104 − 2×6 = 92px room ⇒
      ≥5px slack — fitting no worse than 009 (FR-003, contract M2.1/M2.2). */
-  padding: 30px clamp(6px, 4vw, 26px);
+  /* Bugfix surfaced by the visual suite (012): M2.1's own math ("104 −
+     2×6 = 92px room at 320px") requires the 6px floor to ACTUALLY engage
+     at 320px, but 4vw = 12.8px there — the floor only engages below
+     150px. With 12.8px/side the text room is 78.4px and the longest
+     real names ("Muhammed"/"Mohammed" ≈82px at the 15px floor) ellipsize
+     at the tightest width (M2.2 violated). A 2vw slope delivers the
+     committed numbers: 6.4px at 320px → 92px text room (≥10px margin),
+     ≈26px (cap) at ≥1280px — desktop geometry unchanged. */
+  padding: 30px clamp(6px, 2vw, 26px);
   /* Feature 010 (T003, research R3): shrink font first — floor 15px and
      4.6vw slope unchanged (fit at 320px identical to 009), cap raised
      26 → 40px so names are the dominant text and reach 40px on wide
@@ -98,7 +118,14 @@
 .vs {
   flex: 0 0 auto;
   white-space: nowrap;
-  font-size: 16px;
+  /* 010 (T004): 16px weight between the enlarged cards (M1.5); clamped
+     down at tight widths by the bugfix surfaced by the visual suite
+     (012): 010's M1.4 demands the name type be the dominant text at
+     EVERY width, but 010's own type floor (clamp(15px, 4.6vw, 40px)) is
+     15px at 320px while a flat 16px separator outranked the names there.
+     Below ~348px the separator yields (equal to the 008-era 14px aux
+     scale); above it the full 16px bump applies. */
+  font-size: clamp(14px, 4.6vw, 16px);
   opacity: 0.55;
 }
 

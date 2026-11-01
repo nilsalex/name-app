@@ -37,9 +37,36 @@ export interface VoteRecord {
 
 let client: Redis | null = null;
 
-function redis(): Redis {
-  client ??= new Redis({ url: upstashUrl(), token: upstashToken() });
+/**
+ * Mock-mode hook (feature 012): in the visual suite's dev server the
+ * instrumentation hook publishes the in-memory fake client on globalThis;
+ * every webpack bundle's copy of this module consumes it lazily here, so
+ * all entries share the one fake (app/fake-store.ts — webpack dev gives
+ * each entry its own module copies). Production never has the slot set.
+ */
+function currentClient(): Redis | null {
+  if (client) return client;
+  try {
+    // Lazy require avoided; the fake module is tiny and only loaded when
+    // the slot exists (mock mode). Static import would drag the fake into
+    // every bundle; the slot check keeps production byte-identical.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { consumeFakeClient } = require("../app/fake-store") as {
+      consumeFakeClient: () => unknown | undefined;
+    };
+    const fake = consumeFakeClient();
+    if (fake !== undefined) {
+      client = fake as Redis;
+    }
+  } catch {
+    // Module unavailable (e.g. bundled contexts without the fake) — fall
+    // through; in mock mode the suite canary would catch a real failure.
+  }
   return client;
+}
+
+function redis(): Redis {
+  return currentClient() ?? (client ??= new Redis({ url: upstashUrl(), token: upstashToken() }));
 }
 
 /**

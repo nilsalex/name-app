@@ -18,7 +18,11 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/session";
-import { verifyGoogleIdToken } from "@/lib/google-verify";
+import {
+  verifyGoogleIdToken,
+  type VerifyDeps,
+  type GoogleVerifyResult,
+} from "@/lib/google-verify";
 import {
   parseApprovedEmails,
   isApprovedEmail,
@@ -57,22 +61,50 @@ function isName(value: unknown): value is string {
 }
 
 /**
- * Verifies a Google ID token and, for an approved address, resolves the
- * persistent internal user record and sets the signed session cookie
- * (spec 005 FR-001/FR-002/FR-004, contracts.md §1). The email is the
- * lookup key at sign-in ONLY — never returned, logged, or stored in votes
- * or sessions (FR-008/FR-012). Denial happens BEFORE any user-store
- * access: a non-approved account leaves no record (FR-003, research R7).
+ * The verified-identity dependency (feature 012, research R2): the ONLY
+ * external step of the real sign-in path, abstracted so the suite's
+ * internal route can inject a pre-verified identity. The production shape
+ * is exactly `verifyGoogleIdToken(idToken, deps?)` — the default below —
+ * so the production call path is byte-identical to pre-012 (FR-004/C6.6).
+ */
+export type VerifiedIdentityProvider = (
+  idToken: unknown,
+  verifyDeps?: Parameters<typeof verifyGoogleIdToken>[1]
+) => Promise<GoogleVerifyResult>;
+
+/** Default: the real Google verifier (production path, unchanged). */
+function defaultVerify(
+  idToken: unknown,
+  verifyDeps?: Parameters<typeof verifyGoogleIdToken>[1]
+): Promise<GoogleVerifyResult> {
+  // The verifier re-checks the token shape defensively (unchanged behavior).
+  return verifyGoogleIdToken(
+    typeof idToken === "string" ? idToken : "",
+    verifyDeps
+  );
+}
+
+/**
+ * The optional verified-identity dependency (feature 012 T012, research
+ * R2): when omitted — every production and manual-dev caller — the real
+ * `verifyGoogleIdToken` runs and NOTHING else changes. Only the suite's
+ * internal route (app/internal/visual-signin) passes the injection, which
+ * skips token verification and feeds the fixed suite identity straight
+ * into the UNCHANGED remainder of the real sign-in path below:
+ * assertAuthConfigured → approved-email check → resolveUser (persistent
+ * record) → sealSession (real cookie format, suite SESSION_SECRET) →
+ * cookies().set. No other logic moved (US2 acceptance scenario 2).
  */
 export async function signIn(
   idToken: unknown,
-  verifyDeps?: Parameters<typeof verifyGoogleIdToken>[1]
+  verifyDeps?: Parameters<typeof verifyGoogleIdToken>[1],
+  verifiedIdentity: VerifiedIdentityProvider = defaultVerify
 ): Promise<SignInResult> {
   try {
     if (typeof idToken !== "string" || idToken.trim() === "") {
       return { ok: false, reason: "invalid-token" };
     }
-    const verified = await verifyGoogleIdToken(idToken, verifyDeps);
+    const verified = await verifiedIdentity(idToken, verifyDeps);
     if (!verified.ok) {
       if (verified.reason === "server-config") {
         return {

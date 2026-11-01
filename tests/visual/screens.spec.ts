@@ -98,7 +98,7 @@ for (const route of ["ranking", "winners"] as const) {
       await gotoVoteScreen(page, baseUrl!);
       await page.locator('[class*="nameButton"]').first().click();
 
-      await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${baseUrl}/${route}`, { waitUntil: "domcontentloaded" });
       const m = await measureSettled(page);
       noHorizontalScroll(m, PHONE_320);
       noOverlaps(m, PHONE_320);
@@ -159,6 +159,13 @@ test.describe("notice stability at PHONE_320", () => {
   test.use({ viewport: { width: PHONE_320.width, height: PHONE_320.height } });
 
   test("pair boxes static across notice hidden → visible → dismissed", async ({ page, baseURL: baseUrl }) => {
+    // Clock emulation (suite mechanics only — the assertions are untouched):
+    // the vote-sender's bounded retry window defaults to 3 min of wall
+    // time, which can never expire inside a <2 min suite. Installing the
+    // emulated clock before navigation lets the scenario actually reach
+    // the expiry branch (newlyFailed → onFailed → persistent notice)
+    // without changing any app code.
+    await page.clock.install();
     await gotoVoteScreen(page, baseUrl!);
     const buttons = page.locator('[class*="nameButton"]');
 
@@ -166,18 +173,14 @@ test.describe("notice stability at PHONE_320", () => {
     await buttons.first().click();
     const hidden = await measureSettled(page);
 
-    // Visible state: abort the vote POSTs; the bounded retry exhausts and
-    // the persistent notice appears (feature 003). The vote-sender retries
-    // every 5 s within a 3-min window — the notice shows after the window
-    // expires, so to keep the suite fast we assert the mechanism on the
-    // geometry that must not move: capture while the notice is absent,
-    // keep aborting while voting until the notice is present, then
-    // unroute and vote successfully to dismiss it.
-    // NOTE: retryWindowMs defaults to 3 min — too slow for a <2 min suite.
-    // The notice appears only after expiry, so this scenario runs the
-    // geometry assertions across the swap boundary (which is the actual
-    // layout risk) and verifies the notice appears under sustained
-    // interception within this test's 60 s budget by voting repeatedly.
+    // Visible state: abort the app POSTs (both the submitVote server
+    // action AND the getScores reserve refill are server-action POSTs —
+    // aborting both keeps the reserve frozen, which is fine: one pending
+    // vote is enough). The pending vote's bounded retry exhausts and the
+    // persistent notice appears (feature 003) once the emulated clock
+    // runs past the retry window. fastForward fires due timers at most
+    // once — one jump covers the 3-min window; the follow-up jump lets
+    // the sender's 5 s retry timer observe the expired window.
     await page.route("**/*", (route) => {
       const req = route.request();
       if (req.method() === "POST" && req.url().includes(baseUrl!)) {
@@ -187,22 +190,26 @@ test.describe("notice stability at PHONE_320", () => {
       }
     });
 
-    // Vote until the notice appears (bounded attempts within the budget).
+    // Start one vote that can never leave the queue.
+    await buttons.first().click();
     let noticeVisible = false;
-    const deadline = Date.now() + 45_000;
-    while (!noticeVisible && Date.now() < deadline) {
-      await buttons.first().click();
+    for (let jump = 0; jump < 30 && !noticeVisible; jump++) {
+      await page.clock.fastForward("10:00");
       noticeVisible = await page
         .locator('[class*="noticeText"]')
         .isVisible()
         .catch(() => false);
     }
+    expect(noticeVisible, "persistent failure notice under sustained interception").toBe(true);
 
-    // Dismissal path: unroute, vote successfully, notice goes away.
+    // Visible-state evidence (C4.1 screenshot set).
+    await screenshot(page, "notice-visible-320x568");
+
+    // Dismissal path: unroute, dismiss the notice via its own button,
+    // then resume voting successfully — the mechanism the scenario ships
+    // with, exercised end to end under the emulated clock.
     await page.unroute("**/*");
-    if (await page.locator('[class*="noticeDismiss"]').isVisible().catch(() => false)) {
-      await page.locator('[class*="noticeDismiss"]').click();
-    }
+    await page.locator('[class*="noticeDismiss"]').click();
     await expect(page.locator('[class*="noticeText"]')).toHaveCount(0);
     await buttons.first().click();
     const dismissed = await measureSettled(page);
@@ -214,9 +221,5 @@ test.describe("notice stability at PHONE_320", () => {
     equalHalves(dismissed, PHONE_320);
     noOverlaps(dismissed, PHONE_320);
     await screenshot(page, "notice-dismissed-320x568");
-    // The interception attempt either surfaced the notice (full path) or
-    // the run stayed within budget — the staticity guarantee above is the
-    // assertion this scenario exists for.
-    void noticeVisible;
   });
 });
