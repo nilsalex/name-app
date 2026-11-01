@@ -27,11 +27,13 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
   // Feature 003: FIFO of pre-generated pairs. A tap pops synchronously from
   // it (instant <100 ms swap, SC-001) while the vote travels in background.
   const [reserve, setReserve] = useState<Pair[]>([]);
-  // Feature 002 (FR-006): score map drives weighted pair generation.
-  // Fetched at mount and at just-in-time refills (~1 fetch per 5 votes —
-  // Free-Plan Budget audit: strictly fewer reads than feature 002's
-  // per-vote fetch; research.md R6).
+  // Feature 002 (FR-006) → superseded by 006: the pair generator now uses
+  // the personal seen-frequency map (pickUnderseenPair). Fetched at mount
+  // and at just-in-time refills (~1 fetch per 5 votes — Free-Plan Budget
+  // audit unchanged; research R2/R4). Win scores are kept in the ref for
+  // potential future use but no longer drive drafting (R5).
   const scoresRef = useRef<Record<string, number>>({});
+  const seenRef = useRef<Record<string, number>>({});
   // Feature 003 (US3): accumulated failed votes behind the persistent,
   // dismissable notice (T010); null = hidden. Dismissal resets the count.
   const [failedNotices, setFailedNotices] = useState<number | null>(null);
@@ -86,10 +88,16 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
     refillInFlight.current = true;
     void (async () => {
       try {
-        const fresh = await getScores();
-        scoresRef.current = fresh;
+        // Pre-draft the batch client-side so its name-slots can be sent as
+        // freshBatch — the server bumps seen for exactly these names in the
+        // same round trip (single-writer rule, research R4).
         const last = reserveRef.current[reserveRef.current.length - 1] ?? pair ?? undefined;
-        setReserveSync(refillReserve(reserveRef.current, fresh, last));
+        const batch = refillReserve([], seenRef.current, last);
+        const batchNames = batch.flat();
+        const fresh = await getScores(batchNames);
+        scoresRef.current = fresh.scores;
+        seenRef.current = fresh.seen;
+        setReserveSync(refillReserve(reserveRef.current, fresh.seen, last));
       } catch {
         // Keep the stale reserve — slightly older weights beat a stall.
       } finally {
@@ -113,8 +121,9 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
       try {
         const current = await getScores();
         if (cancelled) return;
-        scoresRef.current = current;
-        setReserveSync(refillReserve([], current, undefined));
+        scoresRef.current = current.scores;
+        seenRef.current = current.seen;
+        setReserveSync(refillReserve([], current.seen, undefined));
       } catch {
         // No scores available: uniform fallback keeps the app usable (FR-004).
         if (!cancelled) setReserveSync(refillReserve([], undefined, undefined));

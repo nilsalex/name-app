@@ -2,7 +2,13 @@
 
 // Server actions for the voting app (contracts/contracts.md).
 import { COLOGNE_200_BOY_NAMES } from "@/lib/names";
-import { recordVote, scores, userScores } from "@/lib/store";
+import {
+  recordVote,
+  scores,
+  userScores,
+  userSeen,
+  bumpUserSeen,
+} from "@/lib/store";
 import { rankNames } from "@/lib/ranking";
 import type { RankedName } from "@/lib/ranking";
 import {
@@ -163,9 +169,37 @@ export async function getRanking(): Promise<RankedName[] | null> {
   return rankNames(COLOGNE_200_BOY_NAMES, current);
 }
 
-/** Raw win counts for weighted pair selection (feature 002, FR-006). */
-export async function getScores(): Promise<Record<string, number>> {
-  return scores();
+/**
+ * The signed-in user's personal win tally AND seen-frequency (feature 006
+ * US2, contracts.md). Throwing when signed out is intentional: the vote
+ * screen's only caller redirects to login on failure (unchanged behavior).
+ *
+ * With `freshBatch` (refill call): bumps the batch's name-slots in the
+ * user's seen zset — the SINGLE writer of seen-frequency (research R4).
+ * The bump happens after the read and its failure is logged, never thrown
+ * (contracts.md: seen-frequency is heuristic, availability wins).
+ * Without `freshBatch` (mount call): read-only.
+ */
+export async function getScores(
+  freshBatch?: readonly string[]
+): Promise<{ scores: Record<string, number>; seen: Record<string, number> }> {
+  const uid = await getCurrentUid();
+  if (uid === null) {
+    throw new Error("Not signed in");
+  }
+  const [personalScores, personalSeen] = await Promise.all([
+    userScores(uid),
+    userSeen(uid),
+  ]);
+  if (freshBatch && freshBatch.length > 0) {
+    try {
+      await bumpUserSeen(uid, freshBatch);
+    } catch (err) {
+      // bumpUserSeen already swallows its own errors; this is belt-and-braces.
+      console.error("seen bump failed (non-fatal):", err);
+    }
+  }
+  return { scores: personalScores, seen: personalSeen };
 }
 
 /**
