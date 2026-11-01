@@ -27,25 +27,34 @@
   align-items: center;
   gap: 14px;
   /* Feature 008 (T002, R3): the pair row NEVER wraps — left/right slots are
-     stable (FR-001/002, contract C1.1/C1.4). Cards flex-shrink instead, so
-     long-name pairs squeeze to fit without scrolling (clarification Q3). */
+     stable (FR-001/002, contract C1.1/C1.4). Feature 009: children are
+     content-independent static halves (flex 1 1 0 on .nameButton), so box
+     geometry no longer re-derives per pair (contract S1.1/S1.2). */
   flex-wrap: nowrap;
   justify-content: center;
 }
 
 .nameButton {
-  flex: 1 1 auto;
-  /* T003 (R2/R3): min-width 0 lets the card shrink below its content width;
-     combined with min-height: 44px (T006, Q2 touch floor — the 22px padding
+  /* Feature 009 (T002): static pair-box geometry — flex-basis 0 gives each
+     card an equal, content-independent half of the row, so box positions
+     and sizes are pixel-identical across consecutive pairs (FR-001/FR-002,
+     contract S1.1–S1.3). Text is fitted into the immutable box (shrink
+     first, ellipsis last), never the reverse. */
+  flex: 1 1 0;
+  /* T003 (R2): min-width 0 lets the card shrink below its content width;
+     combined with min-height: 44px (008 Q2 touch floor — the 22px padding
      already exceeds 44px, this makes it explicit). */
   min-width: 0;
   min-height: 44px;
   max-width: 44vw;
-  /* T005 refinement (quickstart V2 worst-case math for "Maximilian" at
-     320px): side padding floors at 16px so the shrink step always fits the
-     longest real names — ellipsis stays unreachable per contract C1.3-data.
-     Vertical hit padding stays 22px (touch floor preserved). */
-  padding: 22px clamp(16px, 4vw, 26px);
+  /* T003 refinement for 009 (research R3 worst-case math for the STATIC
+     card width): a basis-0 card is ≈106px wide at 320px, so the 008 16px
+     padding floor would leave only 74px of text room vs ≈87px for the
+     longest real names ("Maximilian"/"Konstantin") and make the ellipsis
+     reachable. Floor lowered to 8px: ≈106 − 2×8 = 90px text room ≥ 87px —
+     ellipsis stays unreachable at ≥320px (contract S1.5 preserves 008
+     C1.3-data). Vertical hit padding stays 22px (touch floor preserved). */
+  padding: 22px clamp(8px, 4vw, 26px);
   /* T004 (R2, clarification Q1): shrink font first (26px → 15px floor,
      dropped to 15px by T005 worst-case math; only reached below ~330px). */
   font-size: clamp(15px, 4.6vw, 26px);
