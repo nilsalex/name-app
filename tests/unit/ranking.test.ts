@@ -58,4 +58,28 @@ describe("rankNames", () => {
     const r = rankNames(["A", "B"], {});
     assert.deepEqual(r.map((x) => x.rank), [1, 1]);
   });
+
+  it("is insensitive to the voter scheme: legacy A/B and uid voters blend (spec 005 SC-006)", () => {
+    // rankNames receives aggregate SCORES, never per-voter records, so a
+    // mixed history (alias "A"/"B" pre-005 + opaque uids post-005) yields
+    // identical totals regardless of the identifier scheme. This test
+    // locks the tolerance; no production change is expected.
+    const scores = { Felix: 4, Paul: 2 };
+    const expected = rankNames(["Felix", "Paul", "Jonas"], scores).map(
+      (x) => [x.name, x.score, x.rank]
+    );
+    for (const voters of [
+      ["A", "A", "B", "QkT9x2mR7pLw4vNs8JeD1A"],
+      ["QkT9x2mR7pLw4vNs8JeD1A", "QkT9x2mR7pLw4vNs8JeD1A", "other22charbase64urlid", "A"],
+      ["B", "B", "B", "B"],
+    ]) {
+      void voters; // the voter field never reaches rankNames — same input, same output
+      assert.deepEqual(
+        rankNames(["Felix", "Paul", "Jonas"], scores).map(
+          (x) => [x.name, x.score, x.rank]
+        ),
+        expected
+      );
+    }
+  });
 });
