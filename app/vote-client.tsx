@@ -52,7 +52,7 @@ export default function VoteClient({ alias }: { alias: Alias }) {
   if (senderRef.current === null) {
     senderRef.current = createVoteSender({
       send: (vote) =>
-        submitVote(vote.winner, vote.loser, vote.voter).then((result) => {
+        submitVote(vote.winner, vote.loser).then((result) => {
           if (!result.ok) throw new Error(result.error ?? "Fehler");
         }),
       onFailed: (count) => setFailedNotices((prev) => (prev ?? 0) + count),
@@ -135,7 +135,7 @@ export default function VoteClient({ alias }: { alias: Alias }) {
       // then dispatch the vote fire-and-forget — presentation never waits.
       // The vote carries exactly the displayed pair (winner = tapped name).
       showNextPair(pair);
-      senderRef.current?.cast({ winner, loser, voter: alias });
+      senderRef.current?.cast({ winner, loser, voter: alias }); // voter unused server-side (session-derived); kept for VoteInput shape
     },
     [pair, showNextPair, alias]
   );
