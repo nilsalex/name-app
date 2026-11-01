@@ -40,7 +40,3 @@ export const BOY_NAMES: string[] = [
 ];
 
 export type NameScore = { name: string; score: number };
-
-export function defaultScores(): NameScore[] {
-  return BOY_NAMES.map((name) => ({ name, score: 0 }));
-}
