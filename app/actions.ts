@@ -76,6 +76,15 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
 }
 
 /**
+ * Ends the session (spec 004 US3, FR-007): deletes the session cookie.
+ * Idempotent — succeeds even without a session.
+ */
+export async function signOut(): Promise<{ ok: true }> {
+  (await cookies()).delete(SESSION_COOKIE_NAME);
+  return { ok: true };
+}
+
+/**
  * Validates and records one vote; returns error state on failure (FR-012).
  * Spec 004 (T016): the alias is derived from the session cookie — the
  * client can no longer choose the identity (US2, FR-005/FR-009).

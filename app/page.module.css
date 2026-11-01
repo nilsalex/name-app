@@ -105,3 +105,20 @@
   color: #c0392b;
   max-width: 320px;
 }
+
+.signOut {
+  align-self: flex-end;
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.signOut:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}

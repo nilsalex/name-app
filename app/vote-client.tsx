@@ -11,14 +11,16 @@
 // Math.random() must not run during prerender (Next.js Cache Components),
 // so pairs are only generated inside effects, never during render.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Pair } from "@/lib/pairing";
 import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
 import { createVoteSender } from "@/lib/vote-sender";
 import type { Alias } from "@/lib/session";
-import { submitVote, getScores } from "@/app/actions";
+import { submitVote, getScores, signOut } from "@/app/actions";
 import styles from "./page.module.css";
 
 export default function VoteClient({ alias }: { alias: Alias }) {
+  const router = useRouter();
   // Displayed pair; null until the first reserve batch is prepared (mount)
   // or while the reserve is exhausted (aria-busy, taps disabled — Q5/V6).
   const [pair, setPair] = useState<Pair | null>(null);
@@ -148,6 +150,14 @@ export default function VoteClient({ alias }: { alias: Alias }) {
 
   return (
     <div className={styles.voteArea}>
+      <button
+        className={styles.signOut}
+        onClick={() => {
+          void signOut().then(() => router.refresh());
+        }}
+      >
+        Abmelden
+      </button>
       <p className={styles.hint}>Welcher Name gefällt dir besser, Person {alias}?</p>
       <div className={styles.pairButtons}>
         <button className={styles.nameButton} onClick={() => vote(pair[0], pair[1])}>
