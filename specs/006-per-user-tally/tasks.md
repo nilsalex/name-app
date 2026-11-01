@@ -126,8 +126,8 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 
 **Purpose**: Documentation and final validation
 
-- [ ] T027 [P] Update `README.md`: describe per-user ranking/winners ("Deine Rangliste"), per-user seen-driven drafting, the two new Redis keys (`namewahl:user:<uid>:scores`, `namewahl:user:<uid>:seen`) and the kept-but-unread global `namewahl:scores` (data-model.md table)
-- [ ] T028 Mark all completed tasks `[x]` in this file; run the full gate trio one final time; hand off `specs/006-per-user-tally/quickstart.md` V1–V6 for live validation in the user's environment (Google + Upstash creds are only available there)
+- [x] T027 [P] Update `README.md`: describe per-user ranking/winners ("Deine Rangliste"), per-user seen-driven drafting, the two new Redis keys (`namewahl:user:<uid>:scores`, `namewahl:user:<uid>:seen`) and the kept-but-unread global `namewahl:scores` (data-model.md table)
+- [x] T028 Mark all completed tasks `[x]` in this file; run the full gate trio one final time; hand off `specs/006-per-user-tally/quickstart.md` V1–V6 for live validation in the user's environment (Google + Upstash creds are only available there)
 
 ---
 

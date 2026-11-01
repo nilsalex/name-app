@@ -30,7 +30,30 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
    `npm run build`.
 
 4. End-to-end validation scenarios: see
-   `specs/005-multi-user-identity/quickstart.md` (V1–V6).
+   `specs/006-per-user-tally/quickstart.md` (V1–V6).
+
+## How votes count (features 005/006)
+
+- **Identity**: every vote is recorded under the signed-in user's internal
+  ID (opaque, generated at first sign-in from an approved Gmail address).
+- **Personal ranking & winners**: `/ranking` ("Deine Rangliste") and
+  `/winners` ("Deine Gewinner") are computed EXCLUSIVELY from your own
+  votes. Other users' votes — and the pre-005 "A"/"B" alias history —
+  never influence your personal view.
+- **Personal pair drafting**: the pairs you are offered balance against
+  your own seen-frequency (how often YOU have been offered each name);
+  under-seen names appear more often. Win counts do not drive drafting.
+- **Redis keys** (prefix `namewahl`):
+  - `namewahl:votes` — stream, one audit entry per vote (all-time).
+  - `namewahl:scores` — global win-count zset, still written per vote for
+    history but read by no user-facing view (kept for a possible future
+    global view).
+  - `namewahl:user:<uid>:scores` — per-user win tally (source of your
+    ranking/winners).
+  - `namewahl:user:<uid>:seen` — per-user name exposure (drives pair
+    drafting; written once per drafted batch).
+  - `namewahl:users` / `namewahl:users:nextnum` — email→ID registry and
+    display-label counter.
 
 ## Getting Started
 
