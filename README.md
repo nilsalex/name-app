@@ -1,5 +1,30 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Setup (Namewahl)
+
+1. Copy `.env.example` to `.env.local` and fill in all values. Required
+   variables:
+   - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — Upstash Redis
+     (free tier) for vote storage.
+   - `GOOGLE_CLIENT_ID` — OAuth client ID from Google Cloud Console
+     ("APIs & Services → Credentials → OAuth client ID", type *Web
+     application*). Add `http://localhost:3000` and your production URL as
+     *Authorized JavaScript origins*. The two approved Gmail addresses
+     should be added as *Test users* on the OAuth consent screen.
+   - `APPROVED_USER_A_EMAIL` / `APPROVED_USER_B_EMAIL` — the two approved
+     Gmail addresses; the variable suffix maps them to alias "A" / "B".
+   - `SESSION_SECRET` — at least 32 random bytes (`openssl rand -base64 32`).
+   In production, set the same variables in Vercel (Settings → Environment
+   Variables) and redeploy.
+
+2. `npm install && npm run dev` → http://localhost:3000
+
+3. Tests: `npm test` (unit + integration), `npx tsc --noEmit`,
+   `npm run build`.
+
+4. End-to-end validation scenarios: see
+   `specs/004-gmail-login/quickstart.md` (V1–V6).
+
 ## Getting Started
 
 First, run the development server:
