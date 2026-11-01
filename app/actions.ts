@@ -64,12 +64,15 @@ function isName(value: unknown): value is string {
  * or sessions (FR-008/FR-012). Denial happens BEFORE any user-store
  * access: a non-approved account leaves no record (FR-003, research R7).
  */
-export async function signIn(idToken: unknown): Promise<SignInResult> {
+export async function signIn(
+  idToken: unknown,
+  verifyDeps?: Parameters<typeof verifyGoogleIdToken>[1]
+): Promise<SignInResult> {
   try {
     if (typeof idToken !== "string" || idToken.trim() === "") {
       return { ok: false, reason: "invalid-token" };
     }
-    const verified = await verifyGoogleIdToken(idToken);
+    const verified = await verifyGoogleIdToken(idToken, verifyDeps);
     if (!verified.ok) {
       if (verified.reason === "server-config") {
         return {
@@ -85,7 +88,9 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
     if (!isApprovedEmail(verified.email, parseApprovedEmails(approvedEmails()))) {
       return { ok: false, reason: "not-approved" };
     }
-    const record = await createUserStore().resolveUser(verified.email);
+    // Feature 007: forward the verified first name; resolveUser stores it
+    // only on record creation and never updates an existing record (R4).
+    const record = await createUserStore().resolveUser(verified.email, verified.firstName);
     const sealed = sealSession({ uid: record.id, iat: Date.now() });
     (await cookies()).set(SESSION_COOKIE_NAME, sealed, {
       httpOnly: true,

@@ -26,6 +26,39 @@ function fakeBackend(): UserStoreBackend & { putCalls: number } {
 }
 
 describe("createUserStore.resolveUser", () => {
+  // Feature 007 US3 (T012): a name-less resolution must leave the optional
+  // field ABSENT — the key never appears in the stored JSON, and an empty /
+  // whitespace-only derived name is dropped at the write boundary (never
+  // stored as "" — data-model.md validation).
+  it("omits firstName entirely when no name is passed (007 US3)", async () => {
+    const backend = fakeBackend();
+    const store = createUserStore(backend);
+    const record = await store.resolveUser("person.a@gmail.com");
+    assert.equal("firstName" in record, false);
+    // And the stored JSON carries no empty-string placeholder either:
+    const stored = await backend.get("person.a@gmail.com");
+    assert.ok(stored);
+    assert.equal(JSON.stringify(stored).includes("firstName"), false);
+  });
+
+  it("drops an empty or whitespace-only derived name at the write boundary (007 US3)", async () => {
+    for (const bad of ["", "   ", "\t\n"]) {
+      const store = createUserStore(fakeBackend());
+      const record = await store.resolveUser("person.a@gmail.com", bad);
+      assert.equal(
+        "firstName" in record,
+        false,
+        `expected absence for ${JSON.stringify(bad)}`
+      );
+    }
+  });
+
+  it("trims surrounding whitespace from a derived name before storing (007 US3)", async () => {
+    const store = createUserStore(fakeBackend());
+    const record = await store.resolveUser("person.a@gmail.com", "  Nils ");
+    assert.equal(record.firstName, "Nils");
+  });
+
   it("creates a record on first resolve: 22-char id, num 1, ISO createdAt", async () => {
     const backend = fakeBackend();
     const store = createUserStore(backend);
@@ -72,6 +105,38 @@ describe("displayLabel", () => {
     // Forward-compat: a legacy record without num renders the bare label.
     assert.equal(
       displayLabel({ ...record, num: undefined as unknown as number }),
+      "Person"
+    );
+  });
+
+  // Feature 007: a stored first name outranks the neutral label (US1);
+  // records without it keep the neutral label exactly as before (US3).
+  it("prefers a non-empty firstName over the Person N label (007 US1)", () => {
+    const record: UserRecord = {
+      id: "QkT9x2mR7pLw4vNs8JeD1A",
+      num: 3,
+      createdAt: "2026-11-02T10:00:00.000Z",
+      firstName: "Nils",
+    };
+    assert.equal(displayLabel(record), "Nils");
+    // firstName alone (no num) still renders the name, not bare "Person".
+    assert.equal(
+      displayLabel({ ...record, num: undefined as unknown as number }),
+      "Nils"
+    );
+  });
+
+  it("keeps the neutral label when firstName is absent or empty (007 US3)", () => {
+    const base = {
+      id: "QkT9x2mR7pLw4vNs8JeD1A",
+      num: 3,
+      createdAt: "2026-11-02T10:00:00.000Z",
+    };
+    assert.equal(displayLabel({ ...base }), "Person 3");
+    // An empty string must never surface as a blank label.
+    assert.equal(displayLabel({ ...base, firstName: "" }), "Person 3");
+    assert.equal(
+      displayLabel({ ...base, firstName: undefined, num: undefined as unknown as number }),
       "Person"
     );
   });

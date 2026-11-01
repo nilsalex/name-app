@@ -139,6 +139,55 @@ describe("verifyGoogleIdToken", () => {
     assert.deepEqual(result, { ok: false, reason: "server-config" });
   });
 
+  // Feature 007: the tokeninfo response's profile fields carry the user's
+  // first name — derived in the success branch only (research R1/R3).
+  it("derives firstName from given_name (007)", async () => {
+    const result = await verifyGoogleIdToken("some.jwt.value", {
+      ...baseDeps,
+      fetchTokenInfo: fakeFetch({ ...validClaims, given_name: "Nils" }),
+    });
+    assert.deepEqual(result, {
+      ok: true,
+      email: "person.a@gmail.com",
+      firstName: "Nils",
+    });
+  });
+
+  it("falls back to the first word of name when given_name is absent (007)", async () => {
+    const result = await verifyGoogleIdToken("some.jwt.value", {
+      ...baseDeps,
+      fetchTokenInfo: fakeFetch({
+        ...validClaims,
+        name: "Nils Alex",
+      }),
+    });
+    assert.deepEqual(result, {
+      ok: true,
+      email: "person.a@gmail.com",
+      firstName: "Nils",
+    });
+  });
+
+  it("omits firstName when the response has no name fields (007)", async () => {
+    const result = await verifyGoogleIdToken("some.jwt.value", {
+      ...baseDeps,
+      fetchTokenInfo: fakeFetch(validClaims),
+    });
+    assert.deepEqual(result, { ok: true, email: "person.a@gmail.com" });
+    assert.equal("firstName" in result, false);
+  });
+
+  it("never derives a firstName on failure branches (007)", async () => {
+    const rejected = await verifyGoogleIdToken("some.jwt.value", {
+      ...baseDeps,
+      fetchTokenInfo: fakeFetch(
+        { ...validClaims, given_name: "Nils", aud: "other-client" }
+      ),
+    });
+    assert.equal(rejected.ok, false);
+    assert.equal("firstName" in rejected, false);
+  });
+
   it("rejects an empty id token without calling the endpoint", async () => {
     let called = 0;
     const counting = ((_input: unknown, _init?: unknown) => {

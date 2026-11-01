@@ -19,6 +19,12 @@ export interface UserRecord {
   id: string;
   num: number;
   createdAt: string; // ISO timestamp; operator info, never displayed
+  /** First name captured at first sign-in (feature 007); optional so
+   *  pre-existing records (written before this field existed) keep working
+   *  — they simply keep the neutral "Person N" label until a fresh sign-in
+   *  after deploy (research R5: no backfill). Immutable after creation,
+   *  like id/num; never stored as "" (empty string renders as blank). */
+  firstName?: string;
 }
 
 /** Minimal storage surface, injectable for tests. */
@@ -64,7 +70,7 @@ export interface UserStore {
    * normalized email, or mints a new id + sequential display number and
    * persists it. Sign-in is the only caller.
    */
-  resolveUser(email: string): Promise<UserRecord>;
+  resolveUser(email: string, firstName?: string): Promise<UserRecord>;
 }
 
 /**
@@ -89,7 +95,7 @@ export async function findUserById(
 export function createUserStore(backend?: UserStoreBackend): UserStore {
   const store = backend ?? upstashBackend();
   return {
-    async resolveUser(email: string): Promise<UserRecord> {
+    async resolveUser(email: string, firstName?: string): Promise<UserRecord> {
       const key = email.trim().toLowerCase();
       const existing = await store.get(key);
       if (existing !== null) return existing;
@@ -98,6 +104,12 @@ export function createUserStore(backend?: UserStoreBackend): UserStore {
         num: await store.nextNumber(),
         createdAt: new Date().toISOString(),
       };
+      // Feature 007: the first name is captured ONLY on record creation
+      // (research R4: immutable after, no update on re-sign-in) and never
+      // stored empty — an empty/absent name keeps the neutral label.
+      if (firstName !== undefined && firstName.trim() !== "") {
+        record.firstName = firstName.trim();
+      }
       await store.put(key, record);
       return record;
     },
@@ -109,5 +121,10 @@ export function createUserStore(backend?: UserStoreBackend): UserStore {
  * stable sequential number, "Person" when the number is missing.
  */
 export function displayLabel(record: UserRecord): string {
+  // Feature 007 (US1/US3): a stored, non-empty first name outranks the
+  // neutral label; records without one keep "Person N" exactly as before.
+  if (typeof record.firstName === "string" && record.firstName !== "") {
+    return record.firstName;
+  }
   return typeof record.num === "number" ? `Person ${record.num}` : "Person";
 }
