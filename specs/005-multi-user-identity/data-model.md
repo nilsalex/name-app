@@ -1,67 +1,80 @@
-# Data Model: Gmail Login (004)
+# Data Model: Multi-User Identity (005)
 
-Date: 2026-11-02. Existing entities from 003 are listed only where this
-feature touches them. Source of truth for behavior: [spec.md](./spec.md).
+Date: 2026-11-02. Only entities this feature creates or changes are listed.
+Source of truth for behavior: [spec.md](./spec.md).
 
 ## Entities
 
-### Session (NEW)
+### UserRecord (NEW, persisted)
 
-Stateless signed cookie; no server-side record exists.
+Stored in the Redis hash `namewahl:users`, field = normalized email
+(lowercased, trimmed). The email is the *lookup key at sign-in only* — it
+never appears in vote records, sessions, or the UI (FR-008/FR-012).
 
-| Field  | Type           | Description                                              |
-|--------|----------------|----------------------------------------------------------|
-| `alias`| `"A" \| "B"`   | Existing identity the signed-in address maps to (R6)     |
-| `iat`  | `number`       | Issue time, epoch ms                                     |
+| Field       | Type     | Description                                              |
+|-------------|----------|----------------------------------------------------------|
+| `id`        | `string` | Internal user ID: 22-char base64url from 16 random bytes (research R1). Opaque, app-generated, never email-derived (FR-004, FR-012). |
+| `num`       | `number` | Sequential display number (1, 2, …) from counter `namewahl:users:nextnum`; powers the neutral "Person N" label (FR-008). |
+| `createdAt` | `string` | ISO timestamp of first sign-in; operator info only, never displayed. |
 
 Validation rules:
-- Cookie value format: `base64url(payloadJson) + "." + base64url(hmacSha256(payloadJson, SESSION_SECRET))`
-- `verify` rejects: malformed value, HMAC mismatch (compared with `timingSafeEqual`), unknown JSON shape, `alias` not in {A,B}, age > 30 days.
-- Cookie attributes: `httpOnly`, `secure` (production), `sameSite=lax`, `maxAge=30d`, `path=/`, name `namewahl_session`.
+- `id` matches `^[A-Za-z0-9_-]{22}$` on creation; `verifySession` accepts 1–64 base64url chars for forward compatibility.
+- `num` ≥ 1, assigned once at creation, immutable afterwards.
+- One record per normalized email (hash-field uniqueness).
 
 State transitions:
-- *absent* → *valid*: successful `signIn` (token verified + address approved) sets cookie.
-- *valid* → *absent*: `signOut` deletes cookie; expired/tampered cookies are treated as absent.
-- No refresh/renewal: a 30-day-old session simply expires (re-login). Two users, toy app.
+- *absent* → *created*: first approved sign-in (read-or-create, research R3).
+- No updates after creation (id and num are immutable); no deletion flow.
 
-### ApprovedAddress (NEW, configuration only — not stored)
+### Session (CHANGED)
 
-| Field    | Type                 | Description                                     |
-|----------|----------------------|-------------------------------------------------|
-| `email`  | `string`             | Gmail address, compared case-insensitively, trimmed |
-| `alias`  | `"A" \| "B"`         | Fixed mapping, derived from variable suffix     |
+Payload changes from `{ alias: "A" | "B", iat }` (004) to:
 
-Validation rules (fail fast at first access, mirroring `lib/env.ts`):
-- `GOOGLE_CLIENT_ID`, `APPROVED_USER_A_EMAIL`, `APPROVED_USER_B_EMAIL`, `SESSION_SECRET` (≥ 32 bytes) must all be non-empty.
-- The two approved emails must differ from each other.
-- Values are read from environment only; never committed; never logged; never persisted anywhere (FR-008).
+| Field | Type     | Description                                  |
+|-------|----------|----------------------------------------------|
+| `uid` | `string` | The signed-in user's internal ID (UserRecord.id) |
+| `iat` | `number` | Issue time, epoch ms                         |
 
-### GoogleIdToken (NEW, transient — verified then discarded)
+Validation rules (unchanged mechanics from 004):
+- Cookie format, HMAC integrity, `timingSafeEqual`, 30-day expiry, cookie attributes — all identical to 004 (data-model 004 "Session").
+- `verify` now additionally rejects payloads whose `uid` is missing/not a base64url string — including legacy `{ alias }`-shaped payloads, which invalidate all 004 sessions (documented one-time re-login).
 
-| Field            | Type      | Checked against                     |
-|------------------|-----------|-------------------------------------|
-| `aud`            | `string`  | `GOOGLE_CLIENT_ID`                  |
-| `email`          | `string`  | approved-address set (case-insensitive) |
-| `email_verified` | `"true"`  | must be `"true"`                    |
-| `exp`            | `number`  | must be in the future at verify time |
+State transitions: unchanged (absent ↔ valid via signIn/signOut/expiry).
 
-Not stored in any form after sign-in completes.
+### ApprovedAddress (CHANGED, configuration only)
 
-### VoteRecord (EXISTING, unchanged)
+| Field   | Type     | Description                                   |
+|---------|----------|-----------------------------------------------|
+| `email` | `string` | Element of `APPROVED_EMAILS` (comma-separated secret env var), compared normalized |
 
-`{ winner: string, loser: string, user: "A" | "B", at: ISO string }` —
-`user` now originates exclusively from the session alias instead of client
-input. Shape, stream key `namewahl:votes`, and score key `namewahl:scores`
-are byte-identical (FR-005, SC-006).
+Validation rules:
+- `APPROVED_EMAILS` must parse to ≥ 1 non-empty address (fail fast otherwise).
+- Duplicates collapse silently; case/whitespace-insensitive.
+- Extendable by editing the env var only — no code change, no data migration (FR-011, SC-006).
+
+### VoteRecord (CHANGED value domain, unchanged shape)
+
+`{ winner: string, loser: string, user: string, at: ISO string }`
+
+- `user` widens from `"A" | "B"` to `string` (internal user IDs going forward).
+- Legacy stream entries with `user: "A"` / `"B"` remain verbatim; no migration (spec edge case + research R5: historical identities are not merged).
+- Stream key `namewahl:votes`, zset `namewahl:scores` unchanged.
 
 ## Relationships
 
-- `Session.alias` → references the *conceptual* User identity ("A"/"B") that `VoteRecord.user` and alias-based scoring already use. No foreign keys exist (Redis); the invariant is that alias values come only from the fixed set {A, B}.
-- `ApprovedAddress.email` —1:1→ `alias` (enforced by the two-variable config shape).
+- `Session.uid` → `UserRecord.id` (1:1; the session is only issued for a resolved record).
+- `UserRecord` → vote records: implicit by `id` equality in `VoteRecord.user`; no FK enforcement (Redis).
+- `VoteRecord.user` (legacy) → old alias identities "A"/"B" — no UserRecord exists or will be created for them.
+
+## New Redis Keys
+
+| Key                       | Type    | Content                                |
+|---------------------------|---------|----------------------------------------|
+| `namewahl:users`          | hash    | normalized email → UserRecord JSON     |
+| `namewahl:users:nextnum`  | string  | INCR counter for display numbers       |
 
 ## Deletions
 
-- `lib/user.ts` (`getCurrentUser`, `setCurrentUser`, `USER_IDS`,
-  `UserId` local-storage picker) is removed. `UserId` type equivalent
-  (`"A" | "B"`) lives on as `Alias` in the new session module; every
-  former consumer reads identity from the session instead.
+- Env vars `APPROVED_USER_A_EMAIL` / `APPROVED_USER_B_EMAIL` and the
+  `aliasForEmail` mapping (replaced by `APPROVED_EMAILS` parsing).
+- `Alias` type in `lib/session.ts` (superseded by opaque `uid`).

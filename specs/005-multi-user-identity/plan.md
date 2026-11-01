@@ -1,49 +1,50 @@
-# Implementation Plan: Gmail Login
+# Implementation Plan: Multi-User Identity
 
-**Branch**: `004-gmail-login` | **Date**: 2026-11-02 | **Spec**: [spec.md](./spec.md)
+**Branch**: `005-multi-user-identity` | **Date**: 2026-11-02 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/004-gmail-login/spec.md`
+**Input**: Feature specification from `/specs/005-multi-user-identity/spec.md`
 
 ## Summary
 
-Replace the manual "Person A / Person B" localStorage identity picker with a
-real Google (Gmail) login. The user signs in with Google on the app's entry
-route; the server verifies the Google-issued identity token, checks the
-address against two secret allowlist environment variables, and sets a signed
-session cookie that maps the account to its existing alias ("A"/"B"). The
-vote screen becomes reachable only with a valid session, and `submitVote`
-trusts only the server-derived alias from the session — never client input.
-Ranking/winners and all vote-record shapes stay unchanged.
+Replace the A/B alias mapping (env vars `APPROVED_USER_A_EMAIL` /
+`APPROVED_USER_B_EMAIL`) with app-generated, opaque, persistent **internal
+user IDs**. On first approved sign-in, a user record (ID + creation time) is
+persisted server-side in Upstash; the session cookie carries that ID instead
+of an alias. Vote records are attributed to the internal ID going forward
+while historical "A"/"B" records stay untouched, and ranking/winners must
+tolerate the mixed identifier set. The approved list becomes a single
+comma-separated secret env var (`APPROVED_EMAILS`) extendable without code
+changes (FR-011), and per-user display names stay neutral ("Person 1", …)
+without storing emails anywhere (FR-008/FR-012).
 
-Technical approach (from research): Google Identity Services (GIS) button in
-the browser produces a Google ID token; a server action verifies it via
-Google's `tokeninfo` endpoint (aud + email checks) — no new npm packages.
-The session is a stateless HMAC-SHA256-signed cookie built with Node's
-built-in `node:crypto` (per the pinned Next.js auth guide's stateless-session
-pattern, substituting a hand-rolled seal for the suggested libraries since
-our session payload is two fields). With `cacheComponents` enabled, the
-session read sits behind a `<Suspense>` boundary per the bundled
-"Authentication with Cache Components" guide.
+Technical approach (from research): a `users` hash in Upstash
+(`namewahl:users`) maps `email → userId`; IDs are 128-bit `node:crypto`
+`randomBytes` base64url tokens (opaque, non-enumerable). Sign-in does a
+read-or-create on that hash (HGETALL/HSET — one extra Redis round trip per
+*sign-in only*, never per vote). Session payload becomes
+`{ uid, iat }`. Display names for new users are assigned sequentially at
+first sign-in (`namewahl:users:nextnum` counter) so they are stable without
+storing any personal data.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x on Next.js 16.4.3 (App Router, `cacheComponents: true`), React 19, Node 24 (dev/test)
 
-**Primary Dependencies**: next, react (existing); Google Identity Services loaded as a script tag (browser); Google `tokeninfo` HTTPS endpoint (server-side verification); `node:crypto` (built-in, session sealing). NO new npm dependencies.
+**Primary Dependencies**: next, react, @upstash/redis (all existing); Google Identity Services script (existing from 004); `node:crypto` (built-in: HMAC sessions + `randomBytes` for IDs). NO new npm dependencies.
 
-**Storage**: Upstash Redis free tier (existing keys `namewahl:votes`, `namewahl:scores` — unchanged). New secrets in environment: `GOOGLE_CLIENT_ID`, `APPROVED_USER_A_EMAIL`, `APPROVED_USER_B_EMAIL`, `SESSION_SECRET` (per clarified spec: approved addresses are secret environment variables; alias mapping lives in the same secret config).
+**Storage**: Upstash Redis free tier (existing). NEW key `namewahl:users` (hash: email → JSON user record) and `namewahl:users:nextnum` (display-name counter); existing `namewahl:votes` stream and `namewahl:scores` zset keep their shapes — only the `user` field's *value domain* widens from {A,B} to opaque IDs (legacy values untouched). Env config: `GOOGLE_CLIENT_ID`, `APPROVED_EMAILS` (comma-separated, replaces the two per-alias vars), `SESSION_SECRET`.
 
-**Testing**: `node:test` via `tsx` (`npm test`); unit tests for pure modules (session seal/unseal, alias mapping, token verification logic); integration test only for the critical auth-gated path (per constitution Principle IV: route/page implementing core feature + server-action authorization).
+**Testing**: `node:test` via `tsx` (`npm test`); unit tests for new pure modules (user IDs, email list parsing); unit tests for session payload change; store-level unit coverage for the users hash via mocked `@upstash/redis` is NOT added — the read-or-create logic is kept in a thin pure function tested with a fake map store; one integration test extends the existing unauthenticated-submit test to the new session shape.
 
 **Target Platform**: Modern desktop/mobile browsers (Vercel Hobby deployment), Google accounts
 
 **Project Type**: Next.js App Router web app (existing single-project layout)
 
-**Performance Goals**: Returning approved user → vote screen < 5 s (SC-001); first sign-in completes < 60 s (SC-002); session check adds no perceptible latency (stateless cookie verify, O(1) HMAC)
+**Performance Goals**: Returning user → vote screen < 5 s (SC-001); sign-in completes < 60 s (SC-002); session verify stays O(1) HMAC (no Redis read per request); sign-in adds one Redis read-or-create (~10 ms, rare event)
 
-**Constraints**: Free-plan only — Google sign-in and tokeninfo endpoint are free/unmetered at two users; session stateless (no extra Redis reads per request); emails never stored in vote records (FR-008); alias attribution byte-compatible with existing data (FR-005/SC-006)
+**Constraints**: Free-plan only — one hash + one counter key, writes only at first sign-in per user and per vote (unchanged); emails never stored in vote records or session (FR-008/FR-012); legacy "A"/"B" vote records must render unchanged (SC-006); display labels derive from records without exposing emails
 
-**Scale/Scope**: Exactly two approved users; changes confined to the app entry (`/`), one new server module for auth, one client login component, and the server-action authorization path; ranking/winners pages untouched
+**Scale/Scope**: Bounded only by the approved list; changes confined to `lib/users.ts` (rewrite), `lib/session.ts` (payload field), `lib/store.ts` (new users-hash accessors), `app/actions.ts` (signIn resolution), `app/page.tsx` + `app/vote-client.tsx` (label derivation); ranking/winners page logic untouched
 
 ## Constitution Check
 
@@ -51,23 +52,23 @@ session read sits behind a `<Suspense>` boundary per the bundled
 
 | Principle | Status | Notes |
 |---|---|---|
-| I. Framework Fidelity | PASS | Session/cookie handling follows the pinned Next.js auth guide (stateless sessions via `cookies()` API, HttpOnly/Secure/SameSite options) and the Cache Components auth guide (session read behind `<Suspense>`, no `cookies()` in prerender paths). No pages-router patterns, no deprecated APIs. |
-| II. TypeScript Strictness | PASS | New auth module fully typed, explicit exports, no `any`/suppressions planned. |
-| III. Proportionate Test-First | PASS | One focused unit suite per new pure module (`session`, `google-verify`, `users` allowlist), written before implementation; login UI wiring covered by build + quickstart (UI-only, per Principle IV styling/UI exemption). |
-| IV. Proportionate Integration Testing | PASS | One new critical path: the vote screen gate + `submitVote` session authorization. Covered by ONE integration test (unauthenticated submit is rejected; session alias is used, not client input). Ranking/winners unchanged — no new tests there. |
-| V. Simplicity Is Paramount | PASS | No auth library (Auth.js et al.) — two users, one provider, one route. Hand-rolled HMAC session (≈30 lines) instead of iron-session/jose dependency; Google token verification via tokeninfo endpoint instead of a JWT library. Zero new npm packages. Each rejected dependency is justified in research.md. |
-| Free-Plan Budget | PASS | Google sign-in + tokeninfo: free, unmetered, ~1 call per login (rare). Session: stateless, no per-request Redis cost. Vote write volume unchanged (1 pipeline write per vote). No paid services. |
+| I. Framework Fidelity | PASS | Session change is payload-only; cookies()/Suspense patterns from 004 unchanged and still match the pinned auth guides. No new routes, no deprecated APIs. |
+| II. TypeScript Strictness | PASS | New `lib/user-ids.ts` and rewritten `lib/users.ts` fully typed, discriminated unions for results, no `any`. |
+| III. Proportionate Test-First | PASS | Unit suites for ID generation (uniqueness, opacity, format), email-list parsing (trim/case/dedupe), user-store read-or-create (fake map), and the updated session payload — written before implementation. |
+| IV. Proportionate Integration Testing | PASS | One updated integration test (unauthenticated submit rejected, zero writes) covering the changed session shape. No new integration tests for ranking/winners (untouched logic). |
+| V. Simplicity Is Paramount | PASS | No auth library, no ID library — `node:crypto.randomBytes(16)` base64url (one line). Users hash is a flat Redis hash, not "user accounts infrastructure". Email list is one env var, not a config file format. Zero new npm packages. |
+| Free-Plan Budget | PASS | +2 Redis keys, +1-2 commands per sign-in only (HGETALL/HSET + INCR at first sign-in). Vote-write volume unchanged. Well inside 10k commands/day. |
 
-**Post-Phase-1 re-check**: PASS — see Complexity Tracking (empty; the
-auth-module split is the simplest form that keeps session logic pure and
-unit-testable).
+**Post-Phase-1 re-check**: PASS — Complexity Tracking stays empty; the
+users-hash approach is the smallest server-side store that satisfies
+"persistent, app-generated, not email-derived" without a schema migration.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/004-gmail-login/
+specs/005-multi-user-identity/
 ├── plan.md              # This file (/speckit.plan command output)
 ├── research.md          # Phase 0 output (/speckit.plan command)
 ├── data-model.md        # Phase 1 output (/speckit.plan command)
@@ -80,56 +81,45 @@ specs/004-gmail-login/
 
 ```text
 lib/
-├── session.ts           # NEW: stateless signed session cookie (server-only)
-│                        #   — seal/unseal via node:crypto HMAC, pure helpers
-├── google-verify.ts     # NEW: Google ID token verification (tokeninfo call,
-│                        #   aud/email/expiry checks) — server-only
-├── users.ts             # NEW: approved-address → alias mapping from secret
-│                        #   env vars; fail-fast on missing/malformed config
-├── user.ts              # REMOVED (superseded by session-based identity)
-├── pairing.ts           # existing pure weighted draw (unchanged)
-├── pair-queue.ts        # existing pair reserve (unchanged)
-├── vote-sender.ts       # existing vote dispatch queue (unchanged)
-├── store.ts             # existing Upstash persistence (unchanged)
-├── names.ts             # existing name list (unchanged)
-├── ranking.ts           # existing ranking (unchanged)
-└── env.ts               # existing secret-env access (unchanged)
-
-app/
-├── actions.ts           # MODIFIED: submitVote takes NO user argument —
-│                        #   derives alias from the session server-side;
-│                        #   NEW: signIn(idToken) and signOut() actions
-├── page.tsx             # MODIFIED: server component reads session (behind
-│                        #   Suspense), renders LoginClient or VoteClient
-├── login-client.tsx     # NEW: client component hosting the GIS button,
-│                        #   sends the resulting ID token to signIn()
-├── vote-client.tsx      # MODIFIED: receives alias as a prop (no more
-│                        #   localStorage identity pick), adds sign-out button
-├── ranking/, winners/   # unchanged (public pages)
-└── page.module.css      # MINOR: styles for login button + sign-out
+├── user-ids.ts          # NEW: opaque internal user ID generation
+│                        #   (node:crypto.randomBytes(16) → base64url, 22 chars)
+├── users.ts             # REWRITTEN: approved-email parsing from single
+│                        #   APPROVED_EMAILS env var (parse/normalize/dedupe);
+│                        #   alias mapping removed
+├── user-store.ts        # NEW: Upstash-backed read-or-create user records
+│                        #   (hash namewahl:users, counter namewahl:users:nextnum);
+│                        #   pure resolution logic separated for unit testing
+├── session.ts           # MODIFIED: payload { uid: string, iat } — Alias type
+│                        #   removed; verification rejects unknown shapes
+├── env.ts               # MODIFIED: APPROVED_EMAILS accessor replaces
+│                        #   approvedEmail(alias)
+├── store.ts             # MODIFIED: VoteRecord.user widens to string
+│                        #   (legacy "A"/"B" values pass through unchanged);
+│                        #   users-hash accessors re-exported or co-located
+├── actions.ts (app/)    # MODIFIED: signIn resolves email → userId via
+│                        #   user-store, sets session with uid
+├── page.tsx (app/)      # MODIFIED: VoteClient receives uid + display label
+├── vote-client.tsx      # MODIFIED: label prop instead of alias
+└── login-client.tsx     # unchanged (still sends idToken to signIn)
 
 tests/
 ├── unit/
-│   ├── session.test.ts      # NEW: seal/unseal round-trip, tamper rejection,
-│   │                        #   expiry
-│   ├── google-verify.test.ts# NEW: token acceptance/rejection logic (fake
-│   │                        #   fetch), aud/email/expiry checks
-│   ├── users.test.ts        # NEW: alias mapping, fail-fast on bad config
-│   ├── pairing.test.ts      # existing (unchanged)
-│   ├── pair-queue.test.ts   # existing (unchanged)
-│   ├── vote-sender.test.ts  # existing (unchanged)
-│   └── ranking.test.ts      # existing (unchanged)
+│   ├── user-ids.test.ts     # NEW: format, uniqueness, opacity (not email-derived)
+│   ├── users.test.ts        # REWRITTEN: APPROVED_EMAILS parsing rules
+│   ├── user-store.test.ts   # NEW: read-or-create with fake map store,
+│   │                        #   sequential display names, stable re-resolution
+│   ├── session.test.ts      # UPDATED: { uid, iat } payload round-trip/tamper
+│   └── (existing suites unchanged except session)
 └── integration/
-    └── store.test.ts        # existing (unchanged); one NEW auth-gate
-                             #   integration test accompanies tasks (see
-                             #   contracts/contracts.md test requirements)
+    └── submit-auth.test.ts  # UPDATED: unauthenticated rejection + zero writes
+                             #   against the { uid } session shape
 ```
 
-**Structure Decision**: Existing single-project Next.js layout is retained.
-Auth logic lives in `lib/` as pure, server-only modules (unit-testable
-without React); the entry route composes session → login/vote UI; the server
-action layer enforces authorization at the data boundary (DAL pattern from
-the bundled auth guide).
+**Structure Decision**: Existing single-project Next.js layout retained. The
+identity domain grows one pure module (`user-ids.ts`), one storage module
+(`user-store.ts`), and a rewrite of `lib/users.ts` (config parsing); all
+other changes are payload/prop plumbing. Ranking/winners modules are not
+touched.
 
 ## Complexity Tracking
 
