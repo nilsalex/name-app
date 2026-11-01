@@ -77,3 +77,78 @@ export function nextPair(
     return pair;
   }
 }
+
+/**
+ * Picks one name with probability exactly proportional to the given raw
+ * weight (no +1 base — unlike weightedPick, which implements feature 002's
+ * score+1 curve). Prefix-sum draw, O(n), n = 200.
+ */
+function rawWeightedPick(weights: Readonly<Record<string, number>>): string {
+  let total = 0;
+  const prefix = new Array<number>(COLOGNE_200_BOY_NAMES.length);
+  for (let i = 0; i < COLOGNE_200_BOY_NAMES.length; i++) {
+    const name = COLOGNE_200_BOY_NAMES[i];
+    total += weights[name] ?? 1;
+    prefix[i] = total;
+  }
+  const r = Math.random() * total;
+  for (let i = 0; i < prefix.length; i++) {
+    if (r < prefix[i]) return COLOGNE_200_BOY_NAMES[i];
+  }
+  return COLOGNE_200_BOY_NAMES[COLOGNE_200_BOY_NAMES.length - 1];
+}
+
+/**
+ * Feature 006 (US2, research R5): exposure-driven pair draft.
+ *
+ * Each name's chance is proportional to weight = 1 / (1 + seen[name]) —
+ * names the user has been offered less often appear more often, so every
+ * user's exposure converges toward uniform (SC-003). Win scores are
+ * deliberately NOT an input: a name voted up ten times should NOT keep
+ * reappearing — only its exposure counts.
+ *
+ * Missing/empty seen map degenerates to uniform selection (INV-6 —
+ * statistically identical to feature 001's uniform mode).
+ *
+ * Collision/repeat rules mirror nextPair: the SECOND member is redrawn on
+ * self-pair (keeps slot-1 distribution exact); an exact repeat of
+ * previousPair (either order) triggers a full redraw. The loop terminates
+ * with probability 1 (each iteration has positive acceptance probability);
+ * there is no bounded-attempts fallback because the weighted pool never
+ * collapses to a single name — every name keeps weight ≥ 1/(1+max(seen)) > 0,
+ * so a non-previous, non-identical pair is always reachable.
+ */
+export function pickUnderseenPair(
+  previousPair?: Pair,
+  seen?: Readonly<Record<string, number>>
+): Pair {
+  const weights: Record<string, number> = {};
+  if (seen) {
+    for (const name of COLOGNE_200_BOY_NAMES) {
+      const k = seen[name] ?? 0;
+      weights[name] = 1 / (1 + k);
+    }
+  }
+  const pick = seen ? () => rawWeightedPick(weights) : () => {
+    return COLOGNE_200_BOY_NAMES[
+      Math.floor(Math.random() * COLOGNE_200_BOY_NAMES.length)
+    ];
+  };
+
+  for (;;) {
+    const a = pick();
+    let b = pick();
+    while (b === a) {
+      b = pick(); // redraw second member only — keeps slot-1 distribution exact
+    }
+    const pair: Pair = [a, b];
+    if (
+      previousPair &&
+      ((pair[0] === previousPair[0] && pair[1] === previousPair[1]) ||
+        (pair[0] === previousPair[1] && pair[1] === previousPair[0]))
+    ) {
+      continue; // exact repeat (either order) — draw again
+    }
+    return pair;
+  }
+}

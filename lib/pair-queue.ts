@@ -8,7 +8,7 @@
 //
 // No I/O, no module state — pure functions over explicit arguments, no
 // input mutation (unit-pinnable, see tests/unit/pair-queue.test.ts).
-import { nextPair, type Pair } from "./pairing";
+import { pickUnderseenPair, type Pair } from "./pairing";
 
 /** Pairs prepared per refill (batch size). */
 export const BATCH_SIZE = 5;
@@ -17,22 +17,30 @@ export const BATCH_SIZE = 5;
 export const REFILL_THRESHOLD = 2;
 
 /**
- * Append up to BATCH_SIZE valid pairs to the reserve.
- * Each pair is drawn with nextPair(previousPair, scores), chaining the
- * previous pair through the batch so consecutive pairs never repeat
- * (feature 002 FR-005 preserved across batch boundaries).
+ * Append up to BATCH_SIZE valid pairs to the reserve (feature 006, US2).
+ * Each pair is drawn with pickUnderseenPair(previousPair, seen), chaining
+ * BOTH the previous pair AND the accumulated in-batch seen counts through
+ * the batch — so consecutive pairs never repeat (feature 001/002 rule,
+ * preserved across batch boundaries) and a batch self-balances: a name
+ * drafted once in this batch counts as seen for the remaining draws
+ * (contracts.md). The caller persists the accumulated exposure via the
+ * refill-time seen bump (research R4 single-writer rule).
  * Returns a new array; does not mutate the input.
  */
 export function refillReserve(
   reserve: readonly Pair[],
-  scores: Readonly<Record<string, number>> | undefined,
+  seen: Readonly<Record<string, number>> | undefined,
   lastPair: Pair | undefined
 ): Pair[] {
   const next = [...reserve];
   let previous: Pair | undefined = lastPair;
+  const seenAcc: Record<string, number> = seen ? { ...seen } : {};
   for (let i = 0; i < BATCH_SIZE; i++) {
-    previous = nextPair(previous, scores);
+    previous = pickUnderseenPair(previous, seenAcc);
     next.push(previous);
+    // Accumulate in-batch exposure so the batch self-balances.
+    seenAcc[previous[0]] = (seenAcc[previous[0]] ?? 0) + 1;
+    seenAcc[previous[1]] = (seenAcc[previous[1]] ?? 0) + 1;
   }
   return next;
 }
