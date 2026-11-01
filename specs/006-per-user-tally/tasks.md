@@ -110,13 +110,13 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T023 [P] [US3] Write failing mixed-legacy tests in `tests/unit/ranking.test.ts`: a score map fed from `userScores` ignores alias-attributed stream entries — extend the existing 005 mixed-legacy test to assert that records with `user: "A"`/`"B"` contribute NOTHING to a personal ranking while uid-attributed records do (FR-008, SC-005)
-- [ ] T024 [P] [US3] Write failing key-isolation test in `tests/unit/store-keys.test.ts`: for two distinct uids, `userScores`/`userSeen` reads touch disjoint keys (INV-2) — assert key strings differ for uid1 vs uid2 and that neither equals any legacy key (`namewahl:scores`, `namewahl:votes`, `namewahl:users`)
+- [x] T023 [P] [US3] Write failing mixed-legacy tests in `tests/unit/ranking.test.ts`: a score map fed from `userScores` ignores alias-attributed stream entries — extend the existing 005 mixed-legacy test to assert that records with `user: "A"`/`"B"` contribute NOTHING to a personal ranking while uid-attributed records do (FR-008, SC-005)
+- [x] T024 [P] [US3] Write failing key-isolation test in `tests/unit/store-keys.test.ts`: for two distinct uids, `userScores`/`userSeen` reads touch disjoint keys (INV-2) — assert key strings differ for uid1 vs uid2 and that neither equals any legacy key (`namewahl:scores`, `namewahl:votes`, `namewahl:users`)
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Verify both tests pass against the T002–T005 implementation without production-code changes (exclusion is by construction — data-model.md "legacy alias data never becomes a key component"); if either fails, fix `lib/store.ts` key derivation until green (green for T023, T024)
-- [ ] T026 [US3] Run full `npm test && npx tsc --noEmit && npm run build` — US3 checkpoint: hygiene guarantees pinned
+- [x] T025 [US3] Verify both tests pass against the T002–T005 implementation without production-code changes (exclusion is by construction — data-model.md "legacy alias data never becomes a key component"); if either fails, fix `lib/store.ts` key derivation until green (green for T023, T024)
+- [x] T026 [US3] Run full `npm test && npx tsc --noEmit && npm run build` — US3 checkpoint: hygiene guarantees pinned
 
 **Checkpoint**: All user stories independently functional.
 

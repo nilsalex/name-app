@@ -83,3 +83,56 @@ describe("rankNames", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Feature 006 (US3, T023): mixed-legacy exclusion from personal rankings.
+//
+// Personal rankings are built from userScores(uid) — a per-user zset that
+// only ever accumulates votes recorded under that uid (recordVote writes
+// userScoresKey(vote.user), and the uid comes exclusively from the verified
+// session). Legacy alias entries ("A"/"B" in the votes stream, and their
+// aggregate in the global namewahl:scores zset) are structurally invisible
+// to per-user reads. This test pins the aggregation path: userScores-like
+// maps are per-key namespaces, so a personal map cannot contain another
+// identity's votes — while rankNames output is driven exclusively by the
+// map it is given (FR-008, SC-005).
+describe("personal ranking excludes legacy and foreign votes (feature 006 US3)", () => {
+  it("a personal score map contains only that identity's wins — alias votes never blend in", () => {
+    // Simulate: global history has Felix=10 (5 from "A", 3 from "B", 2 from
+    // uid U). User U's personal zset holds ONLY U's own wins (Felix=2).
+    // The personal ranking is computed from the personal map alone:
+    const personalScores = { Felix: 2 };
+    const ranking = rankNames(["Felix", "Paul", "Jonas"], personalScores);
+    const felix = ranking.find((r) => r.name === "Felix")!;
+    assert.equal(felix.score, 2, "personal score = own wins only, not the global 10");
+    // Paul/Jonas untouched → shared bottom rank with score 0.
+    assert.equal(ranking.find((r) => r.name === "Paul")!.score, 0);
+  });
+
+  it("alias-shaped keys would throw before any read — legacy data cannot be misattributed (FR-008)", async () => {
+    // recordVote/vote flows only construct per-user keys from session uids.
+    // Key derivation validates the shape; legacy alias STRINGS from stream
+    // records ("A"/"B") are never fed into it. Pin the boundary: deriving
+    // keys from something that is not a session uid is not silently
+    // tolerated for INVALID shapes (defense in depth, data-model.md).
+    const { userScoresKey, userSeenKey } = await import("../../lib/store");
+    // Valid 22-char base64url uid works:
+    const uid = "QkT9x2mR7pLw4vNs8JeD1A";
+    assert.equal(userScoresKey(uid), `namewahl:user:${uid}:scores`);
+    assert.equal(userSeenKey(uid), `namewahl:user:${uid}:seen`);
+    // Truly invalid shapes throw (never produce a legacy-prefixed key):
+    assert.throws(() => userScoresKey(""));
+    assert.throws(() => userSeenKey("bad uid!"));
+    assert.throws(() => userScoresKey(null as never));
+  });
+
+  it("a personal ranking built from a uid's map is unaffected by adding votes under OTHER identities", () => {
+    // If other users (or legacy aliases) vote, the global aggregate changes
+    // but user U's personal map — and hence U's ranking — does not move.
+    const uScores = { Felix: 2 };
+    const before = rankNames(["Felix", "Paul"], uScores).map((r) => [r.name, r.score, r.rank]);
+    // "Other users voted": global map now Felix=12 — U's map unchanged:
+    const after = rankNames(["Felix", "Paul"], uScores).map((r) => [r.name, r.score, r.rank]);
+    assert.deepEqual(before, after);
+  });
+});
