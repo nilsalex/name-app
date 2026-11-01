@@ -27,7 +27,12 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 2. `npm install && npm run dev` → http://localhost:3000
 
 3. Tests: `npm test` (unit + integration), `npx tsc --noEmit`,
-   `npm run build`.
+   `npm run build`, and the visual suite `npm run visual` (feature 011 —
+   requires `.env.visual` with the values from `.env.example` plus
+   `PORT=3111`, `STORE_KEY_PREFIX=namewahl-visual-test`,
+   `VISUAL_TEST_EMAIL` / `VISUAL_TEST_PASSWORD`; one-time
+   `npx playwright install chromium`. See
+   `specs/011-playwright-visual-verification/quickstart.md`).
 
 4. End-to-end validation scenarios: see
    `specs/006-per-user-tally/quickstart.md` (V1–V6).

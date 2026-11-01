@@ -33,6 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# visual verification suite (feature 011)
+.env.visual
+tests/visual/screenshots/
+tests/visual/.auth-state.json
+tests/visual/.test-results/
+
 # vercel
 .vercel
 

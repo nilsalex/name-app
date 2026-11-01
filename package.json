@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --conditions=react-server --experimental-test-module-mocks --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts"
+    "test": "node --conditions=react-server --experimental-test-module-mocks --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
+    "visual": "playwright test --config tests/visual/playwright.config.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.40.0",
@@ -16,6 +17,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
