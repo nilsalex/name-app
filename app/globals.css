@@ -47,3 +47,21 @@ a {
     color-scheme: dark;
   }
 }
+
+.app-nav {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.app-nav a {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+.app-nav a:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
