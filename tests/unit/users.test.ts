@@ -1,42 +1,68 @@
-// Unit tests: approved-address -> alias mapping (spec 004, contracts.md §4).
-// Pure module with injectable env record — no process.env access here.
+// Unit tests: APPROVED_EMAILS parsing (spec 005, contracts.md §4,
+// research.md R4). Replaces the 004 alias-mapping tests entirely.
+// Pure functions — the raw env value is injected, never read here.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { aliasForEmail } from "../../lib/users";
+import {
+  parseApprovedEmails,
+  isApprovedEmail,
+  assertAuthConfigured,
+} from "../../lib/users";
 
-const env = {
-  APPROVED_USER_A_EMAIL: "person.a@gmail.com",
-  APPROVED_USER_B_EMAIL: "person.b@gmail.com",
-};
-
-describe("aliasForEmail", () => {
-  it("maps the approved A address to alias A", () => {
-    assert.equal(aliasForEmail("person.a@gmail.com", env), "A");
-  });
-
-  it("maps the approved B address to alias B", () => {
-    assert.equal(aliasForEmail("person.b@gmail.com", env), "B");
-  });
-
-  it("matches case-insensitively and ignores surrounding whitespace", () => {
-    assert.equal(aliasForEmail("  Person.A@GMAIL.COM ", env), "A");
-    assert.equal(aliasForEmail("PERSON.B@Gmail.com", env), "B");
-  });
-
-  it("returns null for a non-approved address", () => {
-    assert.equal(aliasForEmail("stranger@gmail.com", env), null);
-  });
-
-  it("returns null for an empty or missing email", () => {
-    assert.equal(aliasForEmail("", env), null);
-    assert.equal(
-      aliasForEmail("", { APPROVED_USER_A_EMAIL: "", APPROVED_USER_B_EMAIL: "" }),
-      null
+describe("parseApprovedEmails", () => {
+  it("splits on commas, trims, lowercases, drops empties, dedupes", () => {
+    const parsed = parseApprovedEmails(
+      " Person.A@Gmail.com , person.a@gmail.com,,\tb.person@gmail.com\n,  "
     );
+    assert.deepEqual(parsed, ["person.a@gmail.com", "b.person@gmail.com"]);
   });
 
-  it("returns null (not a throw) when the address config is missing entirely", () => {
-    assert.equal(aliasForEmail("person.a@gmail.com", {}), null);
+  it("parses a single address", () => {
+    assert.deepEqual(parseApprovedEmails("only@gmail.com"), [
+      "only@gmail.com",
+    ]);
+  });
+
+  it("throws on undefined / empty / whitespace-only config", () => {
+    for (const bad of [undefined, "", " , , "]) {
+      assert.throws(
+        () => parseApprovedEmails(bad),
+        /APPROVED_EMAILS/
+      );
+    }
+  });
+});
+
+describe("isApprovedEmail", () => {
+  const approved = ["person.a@gmail.com", "person.b@gmail.com"];
+
+  it("matches normalized (case, whitespace)", () => {
+    assert.equal(isApprovedEmail("Person.A@Gmail.com", approved), true);
+    assert.equal(isApprovedEmail("  person.b@gmail.com ", approved), true);
+  });
+
+  it("rejects unapproved addresses and raw (unnormalized) list entries", () => {
+    assert.equal(isApprovedEmail("stranger@gmail.com", approved), false);
+    // " UNSORTED@gmail.com" against normalized list: not found.
+    assert.equal(
+      isApprovedEmail("UNSORTED@gmail.com", ["UNSORTED@gmail.com"]),
+      false
+    );
+    assert.equal(isApprovedEmail("", approved), false);
+  });
+});
+
+describe("assertAuthConfigured", () => {
+  it("throws with the variable name on missing/empty config", () => {
+    assert.throws(() => assertAuthConfigured(undefined), /APPROVED_EMAILS/);
+    assert.throws(() => assertAuthConfigured(""), /APPROVED_EMAILS/);
+  });
+
+  it("accepts a one-address list and a multi-address list", () => {
+    assert.doesNotThrow(() => assertAuthConfigured("a@gmail.com"));
+    assert.doesNotThrow(() =>
+      assertAuthConfigured(" a@gmail.com , B@gmail.com ")
+    );
   });
 });

@@ -51,12 +51,11 @@ export function sessionSecret(): string {
 }
 
 /**
- * Approved Gmail address for the given alias ("A" or "B").
- * The variable suffix IS the alias mapping (spec 004 FR-004):
- * APPROVED_USER_A_EMAIL -> alias "A", APPROVED_USER_B_EMAIL -> alias "B".
+ * Raw comma-separated approved-address list (spec 005 FR-011):
+ * APPROVED_EMAILS=person.a@gmail.com,person.b@gmail.com
+ * Replaces 004's APPROVED_USER_A_EMAIL / APPROVED_USER_B_EMAIL. Parsing
+ * and normalization live in lib/users.ts.
  */
-export function approvedEmail(alias: "A" | "B"): string {
-  return required(
-    alias === "A" ? "APPROVED_USER_A_EMAIL" : "APPROVED_USER_B_EMAIL"
-  );
+export function approvedEmails(): string {
+  return required("APPROVED_EMAILS");
 }
