@@ -65,6 +65,36 @@
   font-size: 14px;
 }
 
+/* Feature 003 (T010): persistent "N Stimmen wurden nicht gezählt" notice. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, #d33 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #d33 8%, transparent);
+}
+
+.noticeText {
+  color: #d33;
+  font-size: 14px;
+}
+
+.noticeDismiss {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.noticeDismiss:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
 .userButtons {
   display: flex;
   gap: 14px;

@@ -1,37 +1,133 @@
 "use client";
 
-// Vote screen (US1): pick your identity once, then vote on name pairs.
-// FR-003 single selection; FR-004 immediate next pair; FR-012 error on
-// failed submission with pair unchanged.
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { nextPair, type Pair } from "@/lib/pairing";
+// Vote screen (US1/US2/US3, feature 003): pick your identity once, then tap
+// through name pairs instantly. The next pair is swapped in synchronously
+// from a client-side reserve while the vote dispatches asynchronously
+// (fire-and-forget, bounded retry, at-most-once). Presentation never awaits
+// the network; failures surface via a persistent dismissable notice after
+// the retry window expires (no error signal during the window, Q4).
+//
+// Math.random() must not run during prerender (Next.js Cache Components),
+// so pairs are only generated inside effects, never during render.
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Pair } from "@/lib/pairing";
+import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
+import { createVoteSender } from "@/lib/vote-sender";
 import { getCurrentUser, setCurrentUser, USER_IDS, type UserId } from "@/lib/user";
 import { submitVote, getScores } from "@/app/actions";
 import styles from "./page.module.css";
 
 export default function VoteClient() {
   const [user, setUser] = useState<UserId | null>(() => getCurrentUser());
-  // Math.random() must not run during prerender (Next.js Cache Components),
-  // so the first pair is generated on mount in an effect.
+  // Displayed pair; null until the first reserve batch is prepared (mount)
+  // or while the reserve is exhausted (aria-busy, taps disabled — Q5/V6).
   const [pair, setPair] = useState<Pair | null>(null);
-  // Feature 002: score map drives weighted pair selection (FR-006). Fetched
-  // on mount and refreshed after each successful vote so the very next pair
-  // reflects the latest standings (US3).
-  const [scores, setScores] = useState<Record<string, number>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  // Feature 003: FIFO of pre-generated pairs. A tap pops synchronously from
+  // it (instant <100 ms swap, SC-001) while the vote travels in background.
+  const [reserve, setReserve] = useState<Pair[]>([]);
+  // Feature 002 (FR-006): score map drives weighted pair generation.
+  // Fetched at mount and at just-in-time refills (~1 fetch per 5 votes —
+  // Free-Plan Budget audit: strictly fewer reads than feature 002's
+  // per-vote fetch; research.md R6).
+  const scoresRef = useRef<Record<string, number>>({});
+  // Feature 003 (US3): accumulated failed votes behind the persistent,
+  // dismissable notice (T010); null = hidden. Dismissal resets the count.
+  const [failedNotices, setFailedNotices] = useState<number | null>(null);
+  // Deduplicates in-flight refill fetches (T009): one score fetch at a
+  // time; failures leave the stale reserve usable (catch-and-continue).
+  const refillInFlight = useRef(false);
+  // Mirror of the reserve for synchronous tap handling: takePair must see
+  // the current reserve without waiting for a React state flush.
+  const reserveRef = useRef<Pair[]>([]);
+  const setReserveSync = useCallback((next: Pair[]): void => {
+    reserveRef.current = next;
+    setReserve(next);
+  }, []);
 
+  // Feature 003 vote sender: fire-and-forget dispatch with bounded retry
+  // (default 3-minute window, 5 s delay) and at-most-once recording.
+  // onFailed feeds the persistent notice (T010). Created lazily once —
+  // server action calls are safe here; no Math.random involvement.
+  const senderRef = useRef<ReturnType<typeof createVoteSender> | null>(null);
+  if (senderRef.current === null) {
+    senderRef.current = createVoteSender({
+      send: (vote) =>
+        submitVote(vote.winner, vote.loser, vote.voter).then((result) => {
+          if (!result.ok) throw new Error(result.error ?? "Fehler");
+        }),
+      onFailed: (count) => setFailedNotices((prev) => (prev ?? 0) + count),
+    });
+  }
+
+  // T012: pop the next valid pair from the reserve, skipping any pair that
+  // exactly repeats the currently shown one (display-time guard, T011).
+  // Pure synchronous state work — the tap path never awaits.
+  const showNextPair = useCallback(
+    (shown: Pair | null): void => {
+      const { pair: next, reserve: rest } = takePair(
+        reserveRef.current,
+        shown ?? undefined
+      );
+      setReserveSync(rest);
+      setPair(next ?? null);
+    },
+    [setReserveSync]
+  );
+
+  // Just-in-time refill (US2, clarified Q2 / T009): one batch per threshold
+  // crossing — not per vote, not on a timer. Chains the last reserve pair
+  // (or the currently shown pair when the reserve ran dry) as lastPair so
+  // generation-time no-repeat chaining holds across batch boundaries (T012).
+  // Score-fetch failures leave the stale reserve usable (catch-and-continue).
+  const refill = useCallback((): void => {
+    if (refillInFlight.current) return;
+    refillInFlight.current = true;
+    void (async () => {
+      try {
+        const fresh = await getScores();
+        scoresRef.current = fresh;
+        const last = reserveRef.current[reserveRef.current.length - 1] ?? pair ?? undefined;
+        setReserveSync(refillReserve(reserveRef.current, fresh, last));
+      } catch {
+        // Keep the stale reserve — slightly older weights beat a stall.
+      } finally {
+        refillInFlight.current = false;
+      }
+    })();
+  }, [pair, setReserveSync]);
+
+  // T009: trigger refill exactly when the reserve drops below the
+  // threshold — off the presentation path, deduplicated.
+  useEffect(() => {
+    if (needsRefill(reserve) && !refillInFlight.current) refill();
+  }, [reserve, refill]);
+
+  // Mount (T007): fetch scores once, prepare the initial batch, then show
+  // the first pair via the pump effect. Pairs are only generated inside
+  // effects (Math.random never runs during prerender).
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const current = await getScores();
-      if (!cancelled) setScores(current);
-      setPair(nextPair(undefined, current));
+      try {
+        const current = await getScores();
+        if (cancelled) return;
+        scoresRef.current = current;
+        setReserveSync(refillReserve([], current, undefined));
+      } catch {
+        // No scores available: uniform fallback keeps the app usable (FR-004).
+        if (!cancelled) setReserveSync(refillReserve([], undefined, undefined));
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setReserveSync]);
+
+  // Presentation pump: whenever no pair is displayed but the reserve holds
+  // one (initial mount, or post-refill exhaustion recovery), show it.
+  useEffect(() => {
+    if (pair === null && reserveRef.current.length > 0) showNextPair(null);
+  }, [pair, showNextPair]);
 
   const chooseUser = useCallback((id: UserId) => {
     setCurrentUser(id);
@@ -41,27 +137,13 @@ export default function VoteClient() {
   const vote = useCallback(
     (winner: string, loser: string) => {
       if (!user) return;
-      setError(null);
-      startTransition(async () => {
-        const result = await submitVote(winner, loser, user);
-        if (!result.ok) {
-          // FR-012: vote not counted, pair stays unchanged, user is told.
-          setError(result.error ?? "Fehler — bitte nochmal versuchen.");
-          return;
-        }
-        // Refresh scores first so the next draw uses the latest standings
-        // (US3 / FR-006); fall back to the stale map if the fetch fails.
-        let fresh = scores;
-        try {
-          fresh = await getScores();
-          setScores(fresh);
-        } catch {
-          // keep stale scores — draw continues with slightly older weights
-        }
-        setPair((prev) => nextPair(prev ?? undefined, fresh));
-      });
+      // T007/T012: synchronously swap in the next pair (<100 ms, SC-001),
+      // then dispatch the vote fire-and-forget — presentation never waits.
+      // The vote carries exactly the displayed pair (winner = tapped name).
+      showNextPair(pair);
+      senderRef.current?.cast({ winner, loser, voter: user });
     },
-    [user, scores]
+    [pair, showNextPair, user]
   );
 
   if (!user) {
@@ -80,6 +162,8 @@ export default function VoteClient() {
   }
 
   if (!pair) {
+    // Initial mount or exhausted reserve: neutral aria-busy pair area with
+    // taps disabled until a prepared pair arrives (clarified Q5; V6).
     return <div className={styles.voteArea} aria-busy="true" />;
   }
 
@@ -87,26 +171,26 @@ export default function VoteClient() {
     <div className={styles.voteArea}>
       <p className={styles.hint}>Welcher Name gefällt dir besser, Person {user}?</p>
       <div className={styles.pairButtons}>
-        <button
-          className={styles.nameButton}
-          disabled={pending}
-          onClick={() => vote(pair[0], pair[1])}
-        >
+        <button className={styles.nameButton} onClick={() => vote(pair[0], pair[1])}>
           {pair[0]}
         </button>
         <span className={styles.vs}>oder</span>
-        <button
-          className={styles.nameButton}
-          disabled={pending}
-          onClick={() => vote(pair[1], pair[0])}
-        >
+        <button className={styles.nameButton} onClick={() => vote(pair[1], pair[0])}>
           {pair[1]}
         </button>
       </div>
-      {error && (
-        <p role="alert" className={styles.error}>
-          {error}
-        </p>
+      {failedNotices !== null && (
+        <div className={styles.notice}>
+          <p role="alert" className={styles.noticeText}>
+            {failedNotices} Stimmen wurden nicht gezählt
+          </p>
+          <button
+            className={styles.noticeDismiss}
+            onClick={() => setFailedNotices(null)}
+          >
+            Ausblenden
+          </button>
+        </div>
       )}
     </div>
   );
