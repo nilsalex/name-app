@@ -32,10 +32,12 @@ export type SignInResult =
   | {
       ok: false;
       reason: "invalid-token" | "not-approved" | "server-config";
-      /** Safe, operator-facing diagnostic hint (spec 005 debugging aid);
-       *  present only on server-config failures. NEVER contains secret
-       *  values — only the variable name involved (FR-008 boundary kept). */
+      /** Safe, operator-facing diagnostic (spec 005 debugging aid);
+       *  present only on failures. NEVER contains secret or token values
+       *  — only variable names or which token check failed. */
       detail?: string;
+      /** Present only when reason comes from token verification. */
+      stage?: "aud-mismatch" | "email-unverified" | "email-missing" | "expired" | "fetch-failed" | "token-rejected";
     };
 
 export interface WinnersResult {
@@ -63,7 +65,15 @@ export async function signIn(idToken: unknown): Promise<SignInResult> {
     }
     const verified = await verifyGoogleIdToken(idToken);
     if (!verified.ok) {
-      return { ok: false, reason: verified.reason };
+      if (verified.reason === "server-config") {
+        return {
+          ok: false,
+          reason: "server-config",
+          detail:
+            "Environment check failed for GOOGLE_CLIENT_ID (name only, never its value).",
+        };
+      }
+      return { ok: false, reason: verified.reason, stage: verified.stage };
     }
     assertAuthConfigured();
     if (!isApprovedEmail(verified.email, parseApprovedEmails(approvedEmails()))) {

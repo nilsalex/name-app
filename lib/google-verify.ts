@@ -18,7 +18,19 @@ export interface GoogleTokenClaims {
 
 export type GoogleVerifyResult =
   | { ok: true; email: string }
-  | { ok: false; reason: "invalid-token" | "server-config" };
+  | {
+      ok: false;
+      reason: "invalid-token" | "server-config";
+      /** Safe diagnostic tag for operator debugging (spec 005 probe);
+       *  never contains token contents, only which check failed. */
+      stage?:
+        | "aud-mismatch"
+        | "email-unverified"
+        | "email-missing"
+        | "expired"
+        | "fetch-failed"
+        | "token-rejected";
+    };
 
 export interface VerifyDeps {
   clientId?: string;
@@ -53,10 +65,10 @@ export async function verifyGoogleIdToken(
     const doFetch = deps?.fetchTokenInfo ?? fetch;
     response = await doFetch(`${TOKENINFO_URL}?id_token=${encodeURIComponent(idToken)}`);
   } catch {
-    return { ok: false, reason: "invalid-token" };
+    return { ok: false, reason: "invalid-token", stage: "fetch-failed" };
   }
   if (!response.ok) {
-    return { ok: false, reason: "invalid-token" };
+    return { ok: false, reason: "invalid-token", stage: "token-rejected" };
   }
 
   let claims: unknown;
@@ -70,14 +82,16 @@ export async function verifyGoogleIdToken(
     return { ok: false, reason: "invalid-token" };
   }
 
-  if (c.aud !== clientId) return { ok: false, reason: "invalid-token" };
-  if (c.email_verified !== "true") return { ok: false, reason: "invalid-token" };
+  if (c.aud !== clientId)
+    return { ok: false, reason: "invalid-token", stage: "aud-mismatch" };
+  if (c.email_verified !== "true")
+    return { ok: false, reason: "invalid-token", stage: "email-unverified" };
   if (typeof c.email !== "string" || c.email.trim() === "") {
-    return { ok: false, reason: "invalid-token" };
+    return { ok: false, reason: "invalid-token", stage: "email-missing" };
   }
   const nowSec = Math.floor((deps?.now ? deps.now() : Date.now()) / 1000);
   if (typeof c.exp !== "number" || c.exp <= nowSec) {
-    return { ok: false, reason: "invalid-token" };
+    return { ok: false, reason: "invalid-token", stage: "expired" };
   }
 
   return { ok: true, email: c.email.trim() };

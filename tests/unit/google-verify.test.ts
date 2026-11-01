@@ -49,7 +49,11 @@ describe("verifyGoogleIdToken", () => {
       ...baseDeps,
       fetchTokenInfo: fakeFetch({ ...validClaims, aud: "other-client" }),
     });
-    assert.deepEqual(result, { ok: false, reason: "invalid-token" });
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "invalid-token",
+      stage: "aud-mismatch",
+    });
   });
 
   it("rejects a token with an unverified email", async () => {
@@ -57,7 +61,11 @@ describe("verifyGoogleIdToken", () => {
       ...baseDeps,
       fetchTokenInfo: fakeFetch({ ...validClaims, email_verified: "false" }),
     });
-    assert.deepEqual(result, { ok: false, reason: "invalid-token" });
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "invalid-token",
+      stage: "email-unverified",
+    });
   });
 
   it("rejects an expired token", async () => {
@@ -65,7 +73,11 @@ describe("verifyGoogleIdToken", () => {
       ...baseDeps,
       fetchTokenInfo: fakeFetch({ ...validClaims, exp: Math.floor(NOW / 1000) - 1 }),
     });
-    assert.deepEqual(result, { ok: false, reason: "invalid-token" });
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "invalid-token",
+      stage: "expired",
+    });
   });
 
   it("rejects a token without an email claim", async () => {
@@ -77,7 +89,11 @@ describe("verifyGoogleIdToken", () => {
         exp: EXP,
       }),
     });
-    assert.deepEqual(result, { ok: false, reason: "invalid-token" });
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "invalid-token",
+      stage: "email-missing",
+    });
   });
 
   it("rejects a malformed (non-object) tokeninfo response", async () => {
@@ -93,7 +109,11 @@ describe("verifyGoogleIdToken", () => {
       ...baseDeps,
       fetchTokenInfo: fakeFetch(validClaims, { ok: false, status: 400 }),
     });
-    assert.deepEqual(result, { ok: false, reason: "invalid-token" });
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "invalid-token",
+      stage: "token-rejected",
+    });
   });
   it("maps a missing client id configuration to server-config", async () => {
     const result = await verifyGoogleIdToken("some.jwt.value", {

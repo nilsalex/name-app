@@ -61,6 +61,24 @@ export default function LoginClient({ clientId }: { clientId: string }) {
           } else if (result.reason === "server-config" && result.detail) {
             // Operator diagnostic (never secret values — see app/actions.ts).
             setError(`Konfigurationsproblem: ${result.detail}`);
+          } else if (result.reason === "invalid-token" && result.stage) {
+            // Per-stage operator text (safe labels only — no token data).
+            const stageText: Record<string, string> = {
+              "aud-mismatch":
+                "GOOGLE_CLIENT_ID mismatch — die Client-ID des Deployments unterscheidet sich von der des Tokens (aud-Prüfung). Prüfe die Umgebungsvariable in Vercel gegen die Client-ID der OAuth-Anwendung.",
+              "email-unverified":
+                "Google meldet die E-Mail des Kontos als nicht verifiziert.",
+              "email-missing": "Der Token enthält keine nutzbare E-Mail.",
+              expired:
+                "Token bereits vor der Prüfung abgelaufen (Zeitversatz?) — bitte erneut versuchen.",
+              "fetch-failed":
+                "Der Server konnte Google tokeninfo nicht erreichen (Netzwerk).",
+              "token-rejected":
+                "Google hat den Token abgelehnt. Bitte erneut versuchen; falls es bestehen bleibt, OAuth-Client-Setup prüfen.",
+            };
+            setError(
+              `Token-Prüfung fehlgeschlagen: ${stageText[result.stage] ?? "Unbekannter Grund."}`
+            );
           } else {
             setError("Anmeldung fehlgeschlagen — bitte erneut versuchen.");
           }
