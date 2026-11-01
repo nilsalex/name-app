@@ -6,11 +6,26 @@ import { recordVote, scores } from "@/lib/store";
 import { rankNames } from "@/lib/ranking";
 import type { RankedName } from "@/lib/ranking";
 import { isUserId, type UserId } from "@/lib/user";
+import {
+  sealSession,
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/session";
+import { verifyGoogleIdToken } from "@/lib/google-verify";
+import { aliasForEmail, assertAuthConfigured } from "@/lib/users";
+import { cookies } from "next/headers";
 
 export interface ActionResult {
   ok: boolean;
   error?: string;
 }
+
+export type SignInResult =
+  | { ok: true; alias: "A" | "B" }
+  | {
+      ok: false;
+      reason: "invalid-token" | "not-approved" | "server-config";
+    };
 
 export interface WinnersResult {
   ok: boolean;
@@ -20,6 +35,42 @@ export interface WinnersResult {
 
 function isName(value: unknown): value is string {
   return typeof value === "string" && COLOGNE_200_BOY_NAMES.includes(value);
+}
+
+/**
+ * Verifies a Google ID token and, for an approved address, sets the
+ * signed session cookie (spec 004 FR-002/FR-003/FR-004). Never returns or
+ * logs the email (FR-008).
+ */
+export async function signIn(idToken: unknown): Promise<SignInResult> {
+  try {
+    if (typeof idToken !== "string" || idToken.trim() === "") {
+      return { ok: false, reason: "invalid-token" };
+    }
+    const verified = await verifyGoogleIdToken(idToken);
+    if (!verified.ok) {
+      return { ok: false, reason: verified.reason };
+    }
+    assertAuthConfigured();
+    const alias = aliasForEmail(verified.email);
+    if (alias === null) {
+      return { ok: false, reason: "not-approved" };
+    }
+    const sealed = sealSession({ alias, iat: Date.now() });
+    (await cookies()).set(SESSION_COOKIE_NAME, sealed, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      path: "/",
+    });
+    return { ok: true, alias };
+  } catch (err) {
+    // Missing/malformed secret configuration is an operator error (FR-004):
+    // fail the sign-in without leaking details to the client.
+    console.error("signIn failed:", err);
+    return { ok: false, reason: "server-config" };
+  }
 }
 
 /** Validates and records one vote; returns error state on failure (FR-012). */

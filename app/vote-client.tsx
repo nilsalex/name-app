@@ -1,11 +1,12 @@
 "use client";
 
-// Vote screen (US1/US2/US3, feature 003): pick your identity once, then tap
-// through name pairs instantly. The next pair is swapped in synchronously
-// from a client-side reserve while the vote dispatches asynchronously
-// (fire-and-forget, bounded retry, at-most-once). Presentation never awaits
-// the network; failures surface via a persistent dismissable notice after
-// the retry window expires (no error signal during the window, Q4).
+// Vote screen (spec 004 US1): the identity comes from the session — the
+// server component passes the alias as a prop (no more localStorage picker).
+// Pick a pair, then tap through name pairs instantly. The next pair is
+// swapped in synchronously from a client-side reserve while the vote
+// dispatches asynchronously (fire-and-forget, bounded retry, at-most-once).
+// Presentation never awaits the network; failures surface via a persistent
+// dismissable notice after the retry window expires (feature 003, Q4).
 //
 // Math.random() must not run during prerender (Next.js Cache Components),
 // so pairs are only generated inside effects, never during render.
@@ -13,12 +14,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Pair } from "@/lib/pairing";
 import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
 import { createVoteSender } from "@/lib/vote-sender";
-import { getCurrentUser, setCurrentUser, USER_IDS, type UserId } from "@/lib/user";
+import type { Alias } from "@/lib/session";
 import { submitVote, getScores } from "@/app/actions";
 import styles from "./page.module.css";
 
-export default function VoteClient() {
-  const [user, setUser] = useState<UserId | null>(() => getCurrentUser());
+export default function VoteClient({ alias }: { alias: Alias }) {
   // Displayed pair; null until the first reserve batch is prepared (mount)
   // or while the reserve is exhausted (aria-busy, taps disabled — Q5/V6).
   const [pair, setPair] = useState<Pair | null>(null);
@@ -129,37 +129,16 @@ export default function VoteClient() {
     if (pair === null && reserveRef.current.length > 0) showNextPair(null);
   }, [pair, showNextPair]);
 
-  const chooseUser = useCallback((id: UserId) => {
-    setCurrentUser(id);
-    setUser(id);
-  }, []);
-
   const vote = useCallback(
     (winner: string, loser: string) => {
-      if (!user) return;
       // T007/T012: synchronously swap in the next pair (<100 ms, SC-001),
       // then dispatch the vote fire-and-forget — presentation never waits.
       // The vote carries exactly the displayed pair (winner = tapped name).
       showNextPair(pair);
-      senderRef.current?.cast({ winner, loser, voter: user });
+      senderRef.current?.cast({ winner, loser, voter: alias });
     },
-    [pair, showNextPair, user]
+    [pair, showNextPair, alias]
   );
-
-  if (!user) {
-    return (
-      <div className={styles.pickUser}>
-        <h1>Wer bist du?</h1>
-        <div className={styles.userButtons}>
-          {USER_IDS.map((id) => (
-            <button key={id} onClick={() => chooseUser(id)} className={styles.nameButton}>
-              Person {id}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
 
   if (!pair) {
     // Initial mount or exhausted reserve: neutral aria-busy pair area with
@@ -169,7 +148,7 @@ export default function VoteClient() {
 
   return (
     <div className={styles.voteArea}>
-      <p className={styles.hint}>Welcher Name gefällt dir besser, Person {user}?</p>
+      <p className={styles.hint}>Welcher Name gefällt dir besser, Person {alias}?</p>
       <div className={styles.pairButtons}>
         <button className={styles.nameButton} onClick={() => vote(pair[0], pair[1])}>
           {pair[0]}
