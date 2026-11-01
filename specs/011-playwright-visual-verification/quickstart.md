@@ -8,6 +8,12 @@ completes the feature.
 
 ## Prerequisites
 
+> **Superseded by feature 012**: the suite is credential-free. The
+> `.env.visual` bring-up below (real Upstash, Google client id, test
+> identity/password) no longer applies — the committed `.env.visual`
+> template ships the complete configuration. See
+> `specs/012-visual-mocked-deps/quickstart.md`.
+
 - Node 20+, dev server dependencies installed (`npm install`).
 - `.env.visual` created from `.env.example`-style values (never
   committed): real `UPSTASH_REDIS_REST_URL`/`TOKEN` (same free-tier

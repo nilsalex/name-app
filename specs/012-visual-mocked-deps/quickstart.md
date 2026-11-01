@@ -76,3 +76,21 @@ feature.
 Suite green (A) + invariants validated (B) + a provoked setup error
 recognized (C) + agent review passed (D) ⇒ `contracts/visual-mocked-
 deps.md` C1–C6 hold ⇒ FR-001…FR-008 satisfied.
+
+## Verification record (012 implementation, 2026-11-01)
+
+- **A**: verified — 19/19 green in ~18–25 s (multiple runs; see tasks
+  file execution notes for the full per-scenario list).
+- **B1**: verified with a browser-level egress block
+  (`HTTP(S)_PROXY` dead port + `no_proxy=127.0.0.1,localhost`);
+  `unshare -n` is unavailable in the build environment. Green.
+- **B2**: verified — 10 consecutive green runs, identical per-profile
+  summaries, suite identity re-minted per boot.
+- **B3**: verified — the 011 SC-003 injection reproduces the exact
+  failure format (tasks file, T020 note).
+- **B4**: verified — production build + `next start`: internal route
+  404, page 200; `git grep VISUAL_MOCK_EXTERNAL` confined to the suite
+  files, the hook, the route, the template, and this feature's docs.
+- **C**: all four rows verified (missing marker, renamed endpoint,
+  occupied port, short secret) — tasks file T023 note.
+- **D**: see the T026 verdict in the tasks file.

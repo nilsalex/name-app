@@ -139,9 +139,9 @@ unchanged layout and the full screenshot set is written per run.
 - [X] T021 [P] Verify SC-001 (quickstart B1): block all external network egress and re-run `npm run visual` — suite stays green with zero egress beyond localhost; record the run and the blocking method used
 - [X] T022 [P] Verify SC-004 (quickstart B2): run `npm run visual` 10 consecutive times — all 10 exit 0 with identical per-profile summaries (suite identity re-minted deterministically each boot, research R3); investigate any flake via the settle protocol before re-counting
 - [X] T023 [P] Provoke the new setup errors (quickstart C / FR-007): (a) remove `VISUAL_MOCK_EXTERNAL` from `.env.visual` → C3.2 setup error naming the variable; (b) temporarily rename `app/internal/visual-signin/` → canary setup error naming the endpoint; (c) confirm port-occupied (unchanged 011 message) and short `SESSION_SECRET` (unchanged 011 message) still behave; revert everything, confirm green
-- [ ] T024 Final production-invariance audit (SC-006 / C6.6 / FR-004): `git grep VISUAL_MOCK_EXTERNAL` shows hits ONLY in `app/instrumentation.ts`, `app/internal/visual-signin/route.ts`, `tests/visual/`, `.env.visual`, and this feature's docs; `npm run build && npm start` serves the untouched app; suites of record: `npm test`, `npx tsc --noEmit`, `npm run build` all green; `git status` confined to `app/instrumentation.ts`, `app/internal/`, `app/actions.ts` (optional param + comment), `app/fake-store.ts` location per plan (note: file lives at repo path used in T004), `tests/visual/`, `.env.visual`, `.gitignore`, `.env.example`, `specs/012-visual-mocked-deps/`
-- [ ] T025 Update `specs/012-visual-mocked-deps/quickstart.md` checkboxes/notes with actual verified values (where evidence was gathered in T017–T023) and mark 011's stale credential prerequisite rows superseded in README.md (pointer only, no new prose of consequence)
-- [ ] T026 FR-011 agent judgment review (011 contract C5.1 — still the completion gate): load `tests/visual/screenshots/*` as images, judge proportions/balance/coherence per 011 quickstart D, record the verdict (pass or findings) in this tasks file
+- [X] T024 Final production-invariance audit (SC-006 / C6.6 / FR-004): `git grep VISUAL_MOCK_EXTERNAL` shows hits ONLY in `app/instrumentation.ts`, `app/internal/visual-signin/route.ts`, `tests/visual/`, `.env.visual`, and this feature's docs; `npm run build && npm start` serves the untouched app; suites of record: `npm test`, `npx tsc --noEmit`, `npm run build` all green; `git status` confined to `app/instrumentation.ts`, `app/internal/`, `app/actions.ts` (optional param + comment), `app/fake-store.ts` location per plan (note: file lives at repo path used in T004), `tests/visual/`, `.env.visual`, `.gitignore`, `.env.example`, `specs/012-visual-mocked-deps/`
+- [X] T025 Update `specs/012-visual-mocked-deps/quickstart.md` checkboxes/notes with actual verified values (where evidence was gathered in T017–T023) and mark 011's stale credential prerequisite rows superseded in README.md (pointer only, no new prose of consequence)
+- [X] T026 FR-011 agent judgment review (011 contract C5.1 — still the completion gate): load `tests/visual/screenshots/*` as images, judge proportions/balance/coherence per 011 quickstart D, record the verdict (pass or findings) in this tasks file
 
 ---
 
@@ -362,3 +362,29 @@ aligning the slope with M2.1's own numbers — `clamp(6px, 2vw, 26px)`
 (6.4px at 320 → 91.2px room, ≥9px margin for every name; ≈26px cap at
 desktop, geometry unchanged). Verified: canvas max-width 82 ("Muhammed")
 vs room 91.2.
+
+### T026 — FR-011 agent judgment review (011 C5.1 gate)
+
+**Limitation recorded honestly**: the reviewing agent session in this
+environment cannot render images (the model backing the session has no
+image input), so the pixel-level visual judgment of
+`tests/visual/screenshots/*.png` could not be performed as specified.
+What CAN be certified numerically — every 011-D criterion has a
+measurable proxy that the green suite asserts on the very same pages the
+screenshots capture:
+
+- **proportions/balance of the enlarged pair at each profile**: equal
+  halves (box widths within 1px), maximal row (≥95% of the voting area
+  width), static geometry across pairs — asserted at 320/375/430,
+  640/768/1280, and 740×360.
+- **separator legibility**: "oder" non-shrinking, non-wrapping, between
+  the boxes (C1.6 guarantee), type ≥14px at every width.
+- **desktop coherence (not "two islands")**: equal halves + one centered
+  composition + no overflow asserted at 640/768/1280.
+- **notice-state composition**: rect-identity of the pair across
+  hidden → visible → dismissed, no overlap with the notice block.
+
+**Verdict**: numerically PASS; the subjective image review remains OPEN
+and should be performed by an agent session with image support (or a
+human) before calling 011-C5.1 fully closed. Recorded as a finding, not
+silently marked complete.
