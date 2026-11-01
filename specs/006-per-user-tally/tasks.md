@@ -29,7 +29,7 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 
 **Purpose**: Baseline verification before any changes
 
-- [ ] T001 Run existing gates to record a green baseline: `npm test` (87/87 expected), `npx tsc --noEmit`, `npm run build` — do not start other tasks until all three pass
+- [x] T001 Run existing gates to record a green baseline: `npm test` (87/87 expected), `npx tsc --noEmit`, `npm run build` — do not start other tasks until all three pass
 
 **Checkpoint**: Baseline green — feature work can begin.
 
@@ -41,13 +41,13 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 [P] Write failing unit tests for key derivation in `tests/unit/store-keys.test.ts`: `userScoresKey(uid)` / `userSeenKey(uid)` return `` `namewahl:user:${uid}:scores` `` / `:seen`; both throw on uids failing `isUserIdShape` (data-model.md: "Derivation functions validate with isUserIdShape and throw otherwise"); alias strings "A"/"B" are rejected as uid sources (defense in depth, FR-008)
-- [ ] T003 Implement `userScoresKey(uid)` / `userSeenKey(uid)` with `isUserIdShape` guard in `lib/store.ts` (green for T002)
-- [ ] T004 [P] Write failing unit test for per-user score reads in `tests/unit/store-keys.test.ts`: `userScores(uid)` parses the flat `zrange … withScores` array `[name, score, …]` into `Record<string, number>` (same parse idiom as existing `scores()`); missing/empty zset → `{}` (fresh user, spec US1 AC3)
-- [ ] T005 Implement `userScores(uid)` in `lib/store.ts` reading `userScoresKey(uid)` (green for T004)
-- [ ] T006 Write failing unit test for the vote pipeline in `tests/unit/store-keys.test.ts` (mocked pipeline, existing `@upstash/redis` mock idiom): `recordVote` issues exactly three chained commands — `xadd namewahl:votes` (unchanged record fields winner/loser/user/at), `zincrby namewahl:scores` (global, kept per research R4), `zincrby namewahl:user:<uid>:scores` — all in ONE pipeline (data-model INV-3: one round trip, atomicity preserved)
-- [ ] T007 Extend `recordVote` in `lib/store.ts` to the 3-command pipeline (green for T006)
-- [ ] T008 Run `npm test && npx tsc --noEmit && npm run build` — all green before story work
+- [x] T002 [P] Write failing unit tests for key derivation in `tests/unit/store-keys.test.ts`: `userScoresKey(uid)` / `userSeenKey(uid)` return `` `namewahl:user:${uid}:scores` `` / `:seen`; both throw on uids failing `isUserIdShape` (data-model.md: "Derivation functions validate with isUserIdShape and throw otherwise"); alias strings "A"/"B" are rejected as uid sources (defense in depth, FR-008)
+- [x] T003 Implement `userScoresKey(uid)` / `userSeenKey(uid)` with `isUserIdShape` guard in `lib/store.ts` (green for T002)
+- [x] T004 [P] Write failing unit test for per-user score reads in `tests/unit/store-keys.test.ts`: `userScores(uid)` parses the flat `zrange … withScores` array `[name, score, …]` into `Record<string, number>` (same parse idiom as existing `scores()`); missing/empty zset → `{}` (fresh user, spec US1 AC3)
+- [x] T005 Implement `userScores(uid)` in `lib/store.ts` reading `userScoresKey(uid)` (green for T004)
+- [x] T006 Write failing unit test for the vote pipeline in `tests/unit/store-keys.test.ts` (mocked pipeline, existing `@upstash/redis` mock idiom): `recordVote` issues exactly three chained commands — `xadd namewahl:votes` (unchanged record fields winner/loser/user/at), `zincrby namewahl:scores` (global, kept per research R4), `zincrby namewahl:user:<uid>:scores` — all in ONE pipeline (data-model INV-3: one round trip, atomicity preserved)
+- [x] T007 Extend `recordVote` in `lib/store.ts` to the 3-command pipeline (green for T006)
+- [x] T008 Run `npm test && npx tsc --noEmit && npm run build` — all green before story work
 
 **Checkpoint**: Per-user store ready — US1 and US2 can proceed (US2's seen-bump writer is story-local).
 
@@ -63,7 +63,7 @@ Single project at repository root: `lib/`, `app/`, `tests/unit/`, `tests/integra
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T009 [P] [US1] Write failing action-scoping tests in `tests/unit/actions-ranking.test.ts` (module-mock idiom from `tests/unit/signin-flow.test.ts`): `getRanking()` with no session → returns `null` AND issues zero Redis reads (data-model INV-1); with uid "u-test-1" → `rankNames` result built from `userScores("u-test-1")` only; `getWinners()` signed-out → `{ ok: false }`, signed-in with empty tally → `{ ok: true, winners: [] }`, signed-in with tally → names at personal rank 1 including ties
+- [x] T009 [P] [US1] Write failing action-scoping tests in `tests/unit/actions-ranking.test.ts` (module-mock idiom from `tests/unit/signin-flow.test.ts`): `getRanking()` with no session → returns `null` AND issues zero Redis reads (data-model INV-1); with uid "u-test-1" → `rankNames` result built from `userScores("u-test-1")` only; `getWinners()` signed-out → `{ ok: false }`, signed-in with empty tally → `{ ok: true, winners: [] }`, signed-in with tally → names at personal rank 1 including ties
 - [ ] T010 [US1] Implement uid-scoped `getRanking`/`getWinners` in `app/actions.ts` per contracts.md: `getCurrentUid()` → `null` ⇒ `getRanking` returns `null`; otherwise `rankNames(COLOGNE_200_BOY_NAMES, await userScores(uid))`; `getWinners` maps rank-1 names (green for T009)
 
 ### Implementation for User Story 1
