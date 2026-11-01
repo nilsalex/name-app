@@ -10,7 +10,7 @@ import { submitVote } from "./actions";
 async function VoteBoard() {
   const { backend, votes } = await getVotesSnapshot();
   const scores = tally(votes);
-  const totalVotes = Object.keys(votes).length;
+  const totalVotes = votes.size;
 
   return (
     <div style={{ width: "100%", maxWidth: 720 }}>
@@ -31,7 +31,10 @@ async function VoteBoard() {
             .map((s) => (
               <li key={s.name}>
                 <strong>{s.name}</strong> — {s.score} vote
-                {s.score === 1 ? "" : "s"} ({votes[s.name]})
+                {s.score === 1 ? "" : "s"} ({[...votes.entries()]
+                  .filter(([, n]) => n === s.name)
+                  .map(([voter]) => voter)
+                  .join(", ")})
               </li>
             ))}
           {totalVotes === 0 && <li>No votes yet.</li>}
@@ -41,9 +44,9 @@ async function VoteBoard() {
       <section>
         <h2 style={{ fontSize: 18 }}>Vote for a name</h2>
         <p style={{ fontSize: 13, color: "#666" }}>
-          Each submission overwrites this voter&apos;s previous pick for that
-          name (one row per name per voter). Two voters voting at the same
-          time do not lose each other&apos;s votes.
+          One pick per voter (keyed by the voter&apos;s name): a voter re-voting
+          replaces their own pick, different voters never lose each other&apos;s
+          votes.
         </p>
         <form
           action={submitVote}
@@ -103,10 +106,10 @@ async function VoteBoard() {
             Full per-vote log ({totalVotes})
           </summary>
           <ul style={{ fontSize: 13, lineHeight: 1.6, marginTop: 8 }}>
-            {Object.entries(votes)
-              .sort((a, b) => a[1].localeCompare(b[1], "de"))
-              .map(([name, voter]) => (
-                <li key={`${name}:${voter}`}>
+            {[...votes.entries()]
+              .sort((a, b) => a[0].localeCompare(b[0], "de"))
+              .map(([voter, name]) => (
+                <li key={voter}>
                   {voter} → {name}
                 </li>
               ))}

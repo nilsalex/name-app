@@ -38,12 +38,13 @@ Chosen for the spike: **Upstash Redis, used via its plain REST API**
 - Works natively on Vercel (serverless, edge-friendly, generous free tier;
   it is Vercel's own marketplace partner for Redis).
 - Two simultaneous voters: votes are stored as a Redis hash
-  (`HSET name-app:votes <name> <voter>`), one field per name — two voters
-  casting at the same time only touch different fields, so no lost update.
+  (`HSET name-app:votes <voter>\x00<name> 1`), one field per (voter,
+  name) pair — two voters casting at the same time only touch different
+  fields, so no lost update.
 - Dev fallback: a local JSON file (`data/votes.json`) when the env vars are
   absent, so `next dev` works with zero setup. It is NOT portable to
   Vercel's read-only filesystem — the page labels the active backend.
-- One vote per (name, voter): re-voting overwrites that voter's field.
+- One pick per voter: re-voting overwrites that voter's field.
 
 Alternatives deliberately not chosen for the spike:
 
@@ -58,11 +59,12 @@ Alternatives deliberately not chosen for the spike:
 
 ## Decisions the real specification must settle
 
-1. **Schema**: spikes away votes into a single hash of (name -> voter).
-   The real spec needs: a persisted tally vs. per-vote rows (allowing
-   undos, change-of-vote history, timestamps); one vote per voter vs. a
-   shortlist/score per voter (rank ~5 names?); whether "one row per name
-   per voter" or "one row per voter" is the actual product model.
+1. **Schema**: spikes votes into a single hash of (voter -> picked name)
+   (field key `voter\x00name`, derived per-voter snapshot). The real spec
+   needs: a persisted tally vs. per-vote rows (allowing undos,
+   change-of-vote history, timestamps); one vote per voter vs. a
+   shortlist/score per voter (rank ~5 names?); whether "one pick per
+   voter" or a shortlist is the actual product model.
 
 2. **Provider**: Upstash (REST or via Vercel Marketplace KV) vs. Postgres
    (Neon) vs. Vercel Blob/Edge Config. Decide based on whether the final

@@ -7,15 +7,18 @@
 // - Local JSON file fallback (data/votes.json) for dev with no env vars.
 //   NOT usable on Vercel's read-only filesystem.
 //
-// Votes are stored per voter name+name pair as a Redis hash: HSET
-// votes <name>=<voter>. Two simultaneous voters never overwrite each
-// other's separate keys. The full tally is derived by HGETALL.
+// Votes are stored per (name, voter) pair as a Redis hash: HSET
+// votes <voter>\x00<name>=1. Two simultaneous voters never overwrite
+// each other's fields; one voter re-voting the same name rewrites
+// their own field. The full tally is derived by HGETALL.
 import { promises as fs } from "fs";
 import path from "path";
 import { BOY_NAMES, NameScore } from "./names";
 
 const VOTE_KEY = "name-app:votes";
-type Votes = Record<string, string>; // name -> voter
+const FIELD = "\x00"; // voter\x00name
+
+type Votes = Map<string, string>; // voter -> name
 
 function upstashEnv(): { url: string; token: string } | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -58,15 +61,26 @@ function localFile(): string {
 
 async function localRead(): Promise<Votes> {
   try {
-    return JSON.parse(await fs.readFile(localFile(), "utf8")) as Votes;
+    const parsed: unknown = JSON.parse(await fs.readFile(localFile(), "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const entries = Object.entries(parsed as Record<string, unknown>);
+      if (entries.every(([, v]) => typeof v === "string")) {
+        return new Map(entries as [string, string][]);
+      }
+    }
+    return new Map();
   } catch {
-    return {};
+    return new Map();
   }
 }
 
 async function localWrite(votes: Votes): Promise<void> {
   await fs.mkdir(path.dirname(localFile()), { recursive: true });
-  await fs.writeFile(localFile(), JSON.stringify(votes, null, 2), "utf8");
+  await fs.writeFile(
+    localFile(),
+    JSON.stringify(Object.fromEntries(votes), null, 2),
+    "utf8"
+  );
 }
 
 // --- vote access ---
@@ -81,10 +95,14 @@ export async function getVotesSnapshot(): Promise<{
     const result = (await upstashCommand(["HGETALL", VOTE_KEY])) as
       | string[]
       | null;
-    const votes: Votes = {};
+    const votes: Votes = new Map();
     if (Array.isArray(result)) {
       for (let i = 0; i + 1 < result.length; i += 2) {
-        votes[result[i]] = result[i + 1];
+        const field = result[i].split(FIELD);
+        if (field.length === 2) {
+          const [voter, name] = field as [string, string];
+          votes.set(voter, name);
+        }
       }
     }
     return { backend, votes };
@@ -102,12 +120,16 @@ export async function castVote(
   if (!voter.trim()) {
     throw new Error("Voter must not be empty");
   }
+  if (voter.includes(FIELD)) {
+    throw new Error(`Invalid voter: ${voter}`);
+  }
   const backend = activeBackend();
+  const field = voter + FIELD + name;
   if (backend === "upstash") {
-    await upstashCommand(["HSET", VOTE_KEY, name, voter]);
+    await upstashCommand(["HSET", VOTE_KEY, field, 1]);
   } else {
     const votes = await localRead();
-    votes[name] = voter;
+    votes.set(voter, name);
     await localWrite(votes);
   }
 }
@@ -115,6 +137,6 @@ export async function castVote(
 export function tally(votes: Votes): NameScore[] {
   return BOY_NAMES.map((name) => ({
     name,
-    score: Object.keys(votes).filter((k) => k === name).length,
+    score: [...votes.values()].filter((n) => n === name).length,
   })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "de"));
 }
