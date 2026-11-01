@@ -2,6 +2,14 @@
 // FR-002: both members always distinct.
 // Acceptance scenario 3: never identical repeat of previousPair.
 // Clarification Q1: no memory beyond previousPair (repeats allowed).
+//
+// Fix (008-implementation, found while running the full suite for T012):
+// "is uniform with an empty seen map" flaked (~0.7% of runs per Monte
+// Carlo): a PERFECT uniform 10k-draw over 200 names has per-20-name-bin
+// sd ≈ 30, so the ±10% (±100) band is only ~3.3 sd — occasionally one of
+// the 10 bins legitimately misses. Tolerance 0.1 → 0.12 (4 sd, flake rate
+// ≈ 0.06% of runs); the test still catches any systematic bias, which
+// would push entire bins far beyond ±12%.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { nextPair, pickUnderseenPair } from "../../lib/pairing";
@@ -312,7 +320,7 @@ describe("pickUnderseenPair (feature 006)", () => {
     const mean = SEEN_DRAWS / COLOGNE_200_BOY_NAMES.length; // 50
     for (let d = 0; d < 10; d++) {
       const decade = COLOGNE_200_BOY_NAMES.slice(d * 20, (d + 1) * 20);
-      assertAggregate(counts, decade, () => mean);
+      assertAggregate(counts, decade, () => mean, 0.12);
     }
   });
 

@@ -6,6 +6,8 @@
   align-items: center;
   justify-content: center;
   gap: 20px;
+  /* T008 (R5, C3.3): 24px horizontal padding keeps the 320px-max login error
+     text clear of the viewport edges at the tightest supported width. */
   padding: 24px;
   text-align: center;
 }
@@ -24,15 +26,35 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  flex-wrap: wrap;
+  /* Feature 008 (T002, R3): the pair row NEVER wraps — left/right slots are
+     stable (FR-001/002, contract C1.1/C1.4). Cards flex-shrink instead, so
+     long-name pairs squeeze to fit without scrolling (clarification Q3). */
+  flex-wrap: nowrap;
   justify-content: center;
 }
 
 .nameButton {
-  min-width: 150px;
+  flex: 1 1 auto;
+  /* T003 (R2/R3): min-width 0 lets the card shrink below its content width;
+     combined with min-height: 44px (T006, Q2 touch floor — the 22px padding
+     already exceeds 44px, this makes it explicit). */
+  min-width: 0;
+  min-height: 44px;
   max-width: 44vw;
-  padding: 22px 26px;
-  font-size: 26px;
+  /* T005 refinement (quickstart V2 worst-case math for "Maximilian" at
+     320px): side padding floors at 16px so the shrink step always fits the
+     longest real names — ellipsis stays unreachable per contract C1.3-data.
+     Vertical hit padding stays 22px (touch floor preserved). */
+  padding: 22px clamp(16px, 4vw, 26px);
+  /* T004 (R2, clarification Q1): shrink font first (26px → 15px floor,
+     dropped to 15px by T005 worst-case math; only reached below ~330px). */
+  font-size: clamp(15px, 4.6vw, 26px);
+  /* …never break a name onto several lines (FR-002/FR-003), */
+  white-space: nowrap;
+  /* …and only fall back to an ellipsis when even the clamp floor overflows
+     (last resort; unreachable at ≥320px for the current 200-name set). */
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 600;
   border-radius: 16px;
   border: 2px solid color-mix(in srgb, currentColor 18%, transparent);
@@ -55,7 +77,11 @@
   cursor: default;
 }
 
+/* T003 (R3, contract C1.6): the "oder" separator never shrinks or wraps —
+   it stays visible between the two cards at every width. */
 .vs {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 14px;
   opacity: 0.55;
 }
@@ -82,6 +108,8 @@
 }
 
 .noticeDismiss {
+  /* T006 (R4, Q2 touch floor): ≥44px tall hit target. */
+  min-height: 44px;
   padding: 6px 14px;
   font-size: 13px;
   border-radius: 10px;
@@ -104,10 +132,14 @@
   font-size: 14px;
   color: #c0392b;
   max-width: 320px;
+  /* T008 (R5, C3.3): at the tightest 320px viewport the error text must not
+     touch the screen edge — the centered column padding covers it. */
 }
 
 .signOut {
   align-self: flex-end;
+  /* T006 (R4, Q2 touch floor): was ~27px tall — now a ≥44px target. */
+  min-height: 44px;
   padding: 4px 12px;
   font-size: 12px;
   border-radius: 8px;

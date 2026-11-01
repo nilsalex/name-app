@@ -60,6 +60,11 @@ a {
   padding: 8px 14px;
   border-radius: 999px;
   font-size: 15px;
+  /* T011 (008 R5, Q2 touch floor): nav links stay ≥44px tall targets on
+     phones (15px text + 8px vertical padding ≈ 31px today). */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .app-nav a:hover {
