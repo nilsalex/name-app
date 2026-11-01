@@ -127,9 +127,13 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
 
   // Presentation pump: whenever no pair is displayed but the reserve holds
   // one (initial mount, or post-refill exhaustion recovery), show it.
+  // DEPENDS ON THE RESERVE STATE, not only the ref: a mount/refill that
+  // arrives while pair === null must retrigger this effect. With only
+  // stable refs in the deps the effect would never re-run and the vote
+  // area would stay empty forever (live-found bug, T024 validation).
   useEffect(() => {
     if (pair === null && reserveRef.current.length > 0) showNextPair(null);
-  }, [pair, showNextPair]);
+  }, [pair, reserve, showNextPair]);
 
   const vote = useCallback(
     (winner: string, loser: string) => {
