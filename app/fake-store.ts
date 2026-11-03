@@ -24,6 +24,8 @@
 // the per-run reset IS the server lifecycle).
 import { Redis, type Requester, type UpstashRequest, type UpstashResponse } from "@upstash/redis";
 import { _setClientForTests } from "../lib/store";
+import { _setClientForTests as _setNominationClientForTests } from "../lib/nomination-store";
+import { _setClientForTests as _setResetClientForTests } from "../lib/reset-store";
 import * as userStoreModule from "../lib/user-store";
 
 /**
@@ -246,8 +248,13 @@ export function installFakeStore(): void {
   const client = redisOverFake();
   // Process-wide publish FIRST (route bundles read the slot lazily), then
   // the direct seams for the instrumentation bundle's own module copies.
+  // Feature 014: lib/nomination-store.ts and lib/reset-store.ts share the
+  // same accessor pattern and therefore get the same direct injection (the
+  // globalThis slot keeps every other bundle copy consistent).
   publishFakeClient(client);
   _setClientForTests(client);
+  _setNominationClientForTests(client);
+  _setResetClientForTests(client);
   const { _setSharedClientForTests } = userStoreSeams();
   _setSharedClientForTests(client);
 }

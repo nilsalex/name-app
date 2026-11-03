@@ -139,8 +139,8 @@ empty personal ranking — no second confirmation.
 
 **Purpose**: End-to-end validation and final quality gates
 
-- [ ] T020 Run the full quickstart.md validation suite V1–V6 in order on `npm run dev` (and on the deployed branch if credentials allow); record pass/fail per scenario in the PR description
-- [ ] T021 Final constitution gates: `npm test` all green, `npx tsc --noEmit` zero errors, `npm run build` zero type/lint errors (Development Workflow rule); confirm no new dependency entered `package.json` (Principle V) and PR lists exercised principles + test-first evidence per constitution Governance
+- [X] T020 Run the full quickstart.md validation suite V1–V6 in order on `npm run dev` (and on the deployed branch if credentials allow); record pass/fail per scenario in the PR description
+- [X] T021 Final constitution gates: `npm test` all green, `npx tsc --noEmit` zero errors, `npm run build` zero type/lint errors (Development Workflow rule); confirm no new dependency entered `package.json` (Principle V) and PR lists exercised principles + test-first evidence per constitution Governance
 
 ---
 
