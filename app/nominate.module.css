@@ -133,3 +133,109 @@
   color: inherit;
   cursor: pointer;
 }
+
+/* Feature 014 (T014, US2): nominations reset control — mirrors page.module.css
+   .resetControls patterns locally (no shared-CSS refactor, Principle V):
+   ≥44px touch targets, quiet neutral button, destructive confirm state. */
+.resetControls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.resetControl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.resetButton {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: clamp(13px, 4.6vw, 15px);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.resetButton:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.resetButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.resetConfirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(180, 60, 30, 0.4);
+  border-radius: 12px;
+  background: rgba(180, 60, 30, 0.06);
+}
+
+.resetConfirmText {
+  font-size: clamp(13px, 4.6vw, 15px);
+  color: #b43c1e;
+}
+
+.resetConfirmButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.resetConfirmDelete {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: clamp(13px, 4.6vw, 15px);
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid #b43c1e;
+  background: #b43c1e;
+  color: #fff;
+  cursor: pointer;
+}
+
+.resetConfirmDelete:hover:not(:disabled) {
+  background: #9c3116;
+}
+
+.resetConfirmDelete:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.resetConfirmCancel {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: clamp(13px, 4.6vw, 15px);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.resetConfirmCancel:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.resetError {
+  color: #b43c1e;
+  font-size: clamp(13px, 4.6vw, 15px);
+  margin: 0;
+}

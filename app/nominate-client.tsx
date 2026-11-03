@@ -28,6 +28,7 @@ import { createVoteSender, type NominationInput } from "@/lib/vote-sender";
 import { setNomination } from "@/app/actions";
 import type { NominationResult } from "@/app/actions";
 import VoteClient from "./vote-client";
+import ResetControls from "./reset-controls";
 import styles from "./nominate.module.css";
 
 interface NominateClientProps {
@@ -145,6 +146,17 @@ export default function NominateClient({ uid, initial, label }: NominateClientPr
           </button>
         </div>
       )}
+      {/* Feature 014 (T014, US2): ONLY the nominations reset is offered here
+          (research R6 — a fresh round has no votes to reset, FR-005). On
+          success the local decisions map is cleared BEFORE router.refresh()
+          re-derives the fresh round ("0 von 200") server-side. */}
+      <ResetControls
+        variant="nominations"
+        onSuccess={() => {
+          decisionsRef.current = {};
+          setDecisions({});
+        }}
+      />
     </div>
   );
 }

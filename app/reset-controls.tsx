@@ -35,6 +35,15 @@ type ResetActionKind = "votes" | "nominations" | "all";
 interface ResetControlsProps {
   /** Which reset(s) to offer: vote screen → "all"; nomination screen → "nominations". */
   variant: ResetVariant;
+  /**
+   * Optional parent hook, invoked after a confirmed reset resolves
+   * { ok: true } (US2, T014): lets the parent clear its own optimistic
+   * client state BEFORE router.refresh() re-derives the phase server-side.
+   * The nomination screen needs this — NominateClient seeds its decisions
+   * map from server props and would otherwise keep the stale (complete)
+   * map instead of the fresh "0 von 200" round.
+   */
+  onSuccess?: () => void;
 }
 
 interface ResetAction {
@@ -76,7 +85,13 @@ function actionsFor(variant: ResetVariant): ResetAction[] {
 const ALL_ACTIONS = actionsFor("all");
 
 /** One reset control: neutral button → inline confirm → dispatch. */
-function ResetControl({ action }: { action: ResetAction }) {
+function ResetControl({
+  action,
+  onSuccess,
+}: {
+  action: ResetAction;
+  onSuccess?: () => void;
+}) {
   const router = useRouter();
   // null = neutral button; a kind = that control's confirm state.
   const [confirming, setConfirming] = useState<ResetActionKind | null>(null);
@@ -94,7 +109,9 @@ function ResetControl({ action }: { action: ResetAction }) {
         if (result.ok) {
           setConfirming(null);
           setError(null);
-          // research R4: the server gate re-derives the phase from storage.
+          // US2 (T014): the parent clears its own optimistic state first,
+          // then research R4: the gate re-derives the phase from storage.
+          onSuccess?.();
           router.refresh();
         } else {
           setConfirming(null);
@@ -159,12 +176,12 @@ function ResetControl({ action }: { action: ResetAction }) {
   );
 }
 
-export default function ResetControls({ variant }: ResetControlsProps) {
+export default function ResetControls({ variant, onSuccess }: ResetControlsProps) {
   const actions = variant === "all" ? ALL_ACTIONS : actionsFor(variant);
   return (
     <div className={styles.resetControls}>
       {actions.map((action) => (
-        <ResetControl key={action.kind} action={action} />
+        <ResetControl key={action.kind} action={action} onSuccess={onSuccess} />
       ))}
     </div>
   );
