@@ -3,9 +3,12 @@
 // Reset controls (feature 014, contracts.md "app/reset-controls.tsx").
 //
 // One shared client component with a `variant` prop (research R6):
-//   "votes"       → "Stimmen zurücksetzen"      (vote screen, US1)
-//   "nominations" → "Nominierungen zurücksetzen" (nomination screen, US2)
-//   "all"         → both of the above + "Alles zurücksetzen" (US3)
+//   "votes"       → "Stimmen zurücksetzen"       (vote screen, US1)
+//   "nominations" → "Nominierungen zurücksetzen"  (nomination screen, US2)
+//   "all"         → "Stimmen zurücksetzen" + "Alles zurücksetzen"
+//                    (vote screen, both available where votes exist —
+//                    US3; the nominations reset is NOT offered here,
+//                    it lives only on the nomination screen)
 //
 // Destructive guard (FR-007, research R3): a two-step inline confirmation —
 // the first tap swaps the control into a confirm state ("Wirklich löschen?
@@ -70,14 +73,13 @@ function actionsFor(variant: ResetVariant): ResetAction[] {
       },
     ];
   }
-  // variant === "all": the vote screen offers all three (FR-001 + FR-006).
+  // variant === "all" (research R6, FR-001 + FR-006): the vote screen offers
+  // the votes reset AND the combined reset — each with its own two-step
+  // confirm. The nominations reset is NOT offered here: it lives only on
+  // the nomination screen (a fresh round there has no votes to reset;
+  // FR-005 keeps votes out of a nominations reset and vice versa).
   return [
     { kind: "votes", label: "Stimmen zurücksetzen", dispatch: resetVotes },
-    {
-      kind: "nominations",
-      label: "Nominierungen zurücksetzen",
-      dispatch: resetNominations,
-    },
     { kind: "all", label: "Alles zurücksetzen", dispatch: resetAll },
   ];
 }

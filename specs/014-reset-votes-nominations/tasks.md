@@ -126,10 +126,10 @@ empty personal ranking — no second confirmation.
 
 ### Implementation for User Story 3
 
-- [ ] T016 [P] [US3] Extend `tests/integration/reset-store.test.ts` with the combined-reset critical path (Constitution III/IV — red FIRST): seed all three keys for uid1, call `deleteUserEverything(uid1)`, then all three reads (`userScores`, `userSeen`, `readNominations`) return empty and uid2's keys are untouched; assert it was ONE pipeline (single client round trip — the fake client records command batches, data-model.md validation rule 5)
-- [ ] T017 [US3] Implement `deleteUserEverything(uid): Promise<void>` (ONE pipeline `DEL` of `resetTargets(uid, "all")`) and the `resetAll(): Promise<ActionResult>` server action in `lib/reset-store.ts` + `app/actions.ts` per contracts.md (identical shapes to T006) (depends on T003, T016)
-- [ ] T018 [US3] Wire the `"all"` variant in `app/reset-controls.tsx` (button label "Alles zurücksetzen", dispatching `resetAll` — already mounted on the vote screen from T010): the vote screen now offers BOTH "Stimmen zurücksetzen" and "Alles zurücksetzen", each with its own two-step confirm (FR-001 + FR-006); the nomination screen keeps only the nominations variant (research R6) (depends on T017, T008)
-- [ ] T019 [US3] Checkpoint: `npm test` + `npx tsc --noEmit` + `npm run build` green; manual quickstart V5 walk-through (single confirmed action → fresh round + empty tally, no second confirmation)
+- [X] T016 [P] [US3] Extend `tests/integration/reset-store.test.ts` with the combined-reset critical path (Constitution III/IV — red FIRST): seed all three keys for uid1, call `deleteUserEverything(uid1)`, then all three reads (`userScores`, `userSeen`, `readNominations`) return empty and uid2's keys are untouched; assert it was ONE pipeline (single client round trip — the fake client records command batches, data-model.md validation rule 5)
+- [X] T017 [US3] Implement `deleteUserEverything(uid): Promise<void>` (ONE pipeline `DEL` of `resetTargets(uid, "all")`) and the `resetAll(): Promise<ActionResult>` server action in `lib/reset-store.ts` + `app/actions.ts` per contracts.md (identical shapes to T006) (depends on T003, T016)
+- [X] T018 [US3] Wire the `"all"` variant in `app/reset-controls.tsx` (button label "Alles zurücksetzen", dispatching `resetAll` — already mounted on the vote screen from T010): the vote screen now offers BOTH "Stimmen zurücksetzen" and "Alles zurücksetzen", each with its own two-step confirm (FR-001 + FR-006); the nomination screen keeps only the nominations variant (research R6) (depends on T017, T008)
+- [X] T019 [US3] Checkpoint: `npm test` + `npx tsc --noEmit` + `npm run build` green; manual quickstart V5 walk-through (single confirmed action → fresh round + empty tally, no second confirmation)
 
 **Checkpoint**: All user stories independently functional ✅
 
