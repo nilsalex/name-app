@@ -14,6 +14,11 @@ import {
   readNominations,
 } from "@/lib/nomination-store";
 import {
+  deleteUserVotes,
+  deleteUserNominations,
+  deleteUserEverything,
+} from "@/lib/reset-store";
+import {
   nextUndecidedName,
   decidedCount,
   includedNames,
@@ -354,5 +359,68 @@ export async function setNomination(
   } catch (err) {
     console.error("setNomination failed:", err);
     return { ok: false, error: "Speichern fehlgeschlagen — bitte nochmal versuchen." };
+  }
+}
+
+/**
+ * Deletes the signed-in user's OWN vote-derived keys (feature 014, US1,
+ * contracts.md resetVotes): one pipeline DEL of the personal win tally and
+ * seen-frequency zsets (research R1). Session check identical to
+ * submitVote; on success the client's router.refresh() re-derives the
+ * clean post-reset state (research R4). Never touches the global tally,
+ * the audit stream, other users' keys, or nominations (FR-005).
+ */
+export async function resetVotes(): Promise<ActionResult> {
+  try {
+    const uid = await getCurrentUid();
+    if (uid === null) {
+      return { ok: false, error: "Abgelaufen — bitte neu anmelden." };
+    }
+    await deleteUserVotes(uid);
+    return { ok: true };
+  } catch (err) {
+    console.error("resetVotes failed:", err);
+    return { ok: false, error: "Zurücksetzen fehlgeschlagen — bitte nochmal versuchen." };
+  }
+}
+
+/**
+ * Deletes the signed-in user's OWN nominations hash (feature 014, US2,
+ * contracts.md resetNominations): the next gate render derives a fresh
+ * nomination round (research R2 — no restart marker, no cursor). The
+ * user's vote tallies are NOT deleted (FR-005). Session/failure/success
+ * shapes identical to resetVotes.
+ */
+export async function resetNominations(): Promise<ActionResult> {
+  try {
+    const uid = await getCurrentUid();
+    if (uid === null) {
+      return { ok: false, error: "Abgelaufen — bitte neu anmelden." };
+    }
+    await deleteUserNominations(uid);
+    return { ok: true };
+  } catch (err) {
+    console.error("resetNominations failed:", err);
+    return { ok: false, error: "Zurücksetzen fehlgeschlagen — bitte nochmal versuchen." };
+  }
+}
+
+/**
+ * Deletes the signed-in user's OWN votes AND nominations in ONE confirmed
+ * action (feature 014, US3, FR-006): one pipeline DEL of all three
+ * per-user keys (contracts.md resetAll). Session/failure/success shapes
+ * identical to resetVotes.
+ */
+export async function resetAll(): Promise<ActionResult> {
+  try {
+    const uid = await getCurrentUid();
+    if (uid === null) {
+      return { ok: false, error: "Abgelaufen — bitte neu anmelden." };
+    }
+    await deleteUserEverything(uid);
+    return { ok: true };
+  } catch (err) {
+    console.error("resetAll failed:", err);
+    return { ok: false, error: "Zurücksetzen fehlgeschlagen — bitte nochmal versuchen." };
   }
 }
