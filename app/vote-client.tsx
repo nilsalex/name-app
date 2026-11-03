@@ -17,6 +17,7 @@ import type { Pair } from "@/lib/pairing";
 import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
 import { createVoteSender, type VoteInput } from "@/lib/vote-sender";
 import { submitVote, getScores, signOut } from "@/app/actions";
+import ResetControls from "./reset-controls";
 import styles from "./page.module.css";
 
 export default function VoteClient({
@@ -237,6 +238,13 @@ export default function VoteClient({
           </button>
         </div>
       )}
+      {/* Feature 014 (T010, US1): per-user reset controls below the pair
+          area. The reset does NOT touch the pair reserve or the sender
+          queue (research R5) — router.refresh() re-derives everything
+          server-side. variant="all" offers Stimmen/Nominierungen/Alles;
+          each dispatches its own confirmed action (US1 wires "votes";
+          all three are functional via the shared actions module). */}
+      <ResetControls variant="all" />
     </div>
   );
 }

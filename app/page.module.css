@@ -197,3 +197,113 @@
   opacity: 1;
   background: color-mix(in srgb, currentColor 8%, transparent);
 }
+
+/* Feature 014 (T009): reset controls — neutral secondary buttons consistent
+   with .signOut's conventions, a distinct destructive confirm state, and
+   ≥44px touch targets (008 Q2 floor). Small-screen tap targets follow the
+   008–010 mobile conventions; no shared-CSS refactor (Principle V). */
+.resetControls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.resetControl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.resetButton {
+  min-height: 44px;
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.resetButton:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.resetButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Two-step inline confirm state (research R3, FR-007): a quiet frame with
+   the permanence hint and a visibly destructive "Ja, löschen". */
+.resetConfirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, #d33 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #d33 6%, transparent);
+}
+
+.resetConfirmText {
+  font-size: 13px;
+  color: #d33;
+}
+
+.resetConfirmButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.resetConfirmDelete {
+  min-height: 44px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid #d33;
+  background: color-mix(in srgb, #d33 85%, transparent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.resetConfirmDelete:hover:not(:disabled) {
+  background: #d33;
+}
+
+.resetConfirmDelete:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.resetConfirmCancel {
+  min-height: 44px;
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.resetConfirmCancel:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.resetError {
+  color: #d33;
+  font-size: 13px;
+  margin: 0;
+}
