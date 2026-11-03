@@ -15,11 +15,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Pair } from "@/lib/pairing";
 import { needsRefill, refillReserve, takePair } from "@/lib/pair-queue";
-import { createVoteSender } from "@/lib/vote-sender";
+import { createVoteSender, type VoteInput } from "@/lib/vote-sender";
 import { submitVote, getScores, signOut } from "@/app/actions";
 import styles from "./page.module.css";
 
-export default function VoteClient({ uid, label }: { uid: string; label: string }) {
+export default function VoteClient({
+  uid,
+  label,
+  pool,
+}: {
+  uid: string;
+  label: string;
+  /**
+   * Feature 013: the user's included names (their voting pool). Passed
+   * into every refillReserve call — drafting draws EXCLUSIVELY from these
+   * (SC-004/FR-007). The >=2-names guard is the caller's contract boundary
+   * (FR-008); when violated, this component self-sufficiently renders the
+   * locked state instead of the pair area (defensive duplicate of the
+   * completion-time check, copy per research R7).
+   */
+  pool: readonly string[];
+}) {
   const router = useRouter();
   // Displayed pair; null until the first reserve batch is prepared (mount)
   // or while the reserve is exhausted (aria-busy, taps disabled — Q5/V6).
@@ -32,8 +48,14 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
   // and at just-in-time refills (~1 fetch per 5 votes — Free-Plan Budget
   // audit unchanged; research R2/R4). Win scores are kept in the ref for
   // potential future use but no longer drive drafting (R5).
+  // scoresRef / seenRef mirror for potential future use... (kept as-is)
   const scoresRef = useRef<Record<string, number>>({});
   const seenRef = useRef<Record<string, number>>({});
+  // Feature 013: the pool as a ref so refill callbacks (memoized on
+  // [pair, setReserveSync]) always draft against the current pool prop
+  // without re-binding the callbacks on every render.
+  const poolRef = useRef<readonly string[]>(pool);
+  poolRef.current = pool;
   // Feature 003 (US3): accumulated failed votes behind the persistent,
   // dismissable notice (T010); null = hidden. Dismissal resets the count.
   const [failedNotices, setFailedNotices] = useState<number | null>(null);
@@ -52,9 +74,9 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
   // (default 3-minute window, 5 s delay) and at-most-once recording.
   // onFailed feeds the persistent notice (T010). Created lazily once —
   // server action calls are safe here; no Math.random involvement.
-  const senderRef = useRef<ReturnType<typeof createVoteSender> | null>(null);
+  const senderRef = useRef<ReturnType<typeof createVoteSender<VoteInput>> | null>(null);
   if (senderRef.current === null) {
-    senderRef.current = createVoteSender({
+    senderRef.current = createVoteSender<VoteInput>({
       send: (vote) =>
         submitVote(vote.winner, vote.loser).then((result) => {
           if (!result.ok) throw new Error(result.error ?? "Fehler");
@@ -92,12 +114,14 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
         // freshBatch — the server bumps seen for exactly these names in the
         // same round trip (single-writer rule, research R4).
         const last = reserveRef.current[reserveRef.current.length - 1] ?? pair ?? undefined;
-        const batch = refillReserve([], seenRef.current, last);
+        const batch = refillReserve([], seenRef.current, last, poolRef.current);
         const batchNames = batch.flat();
         const fresh = await getScores(batchNames);
         scoresRef.current = fresh.scores;
         seenRef.current = fresh.seen;
-        setReserveSync(refillReserve(reserveRef.current, fresh.seen, last));
+        setReserveSync(
+          refillReserve(reserveRef.current, fresh.seen, last, poolRef.current)
+        );
       } catch {
         // Keep the stale reserve — slightly older weights beat a stall.
       } finally {
@@ -123,10 +147,16 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
         if (cancelled) return;
         scoresRef.current = current.scores;
         seenRef.current = current.seen;
-        setReserveSync(refillReserve([], current.seen, undefined));
+        setReserveSync(
+          refillReserve([], current.seen, undefined, poolRef.current)
+        );
       } catch {
-        // No scores available: uniform fallback keeps the app usable (FR-004).
-        if (!cancelled) setReserveSync(refillReserve([], undefined, undefined));
+        // No scores available: uniform fallback keeps the app usable (FR-004) —
+        // still pool-constrained (feature 013).
+        if (!cancelled)
+          setReserveSync(
+            refillReserve([], undefined, undefined, poolRef.current)
+          );
       }
     })();
     return () => {
@@ -154,6 +184,19 @@ export default function VoteClient({ uid, label }: { uid: string; label: string 
     },
     [pair, showNextPair, uid]
   );
+
+  // Feature 013 (FR-008): fewer than 2 pool names can never produce a
+  // pair — render the locked state instead of the pair area (defensive
+  // duplicate of the completion-time check; copy per research R7).
+  if (pool.length < 2) {
+    return (
+      <div className={styles.voteArea}>
+        <p className={styles.hint} role="alert">
+          Zu wenige Namen übrig ({pool.length}) — Abstimmung nicht möglich.
+        </p>
+      </div>
+    );
+  }
 
   if (!pair) {
     // Initial mount or exhausted reserve: neutral aria-busy pair area with

@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 interface Harness {
-  handle: ReturnType<typeof createVoteSender>;
+  handle: ReturnType<typeof createVoteSender<VoteInput>>;
   /** All send attempts in order. */
   calls: VoteInput[];
   /** Reject the most recent in-flight attempt. */

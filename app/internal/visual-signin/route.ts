@@ -16,6 +16,8 @@ import {
   signIn,
   type SignInResult,
 } from "@/app/actions";
+import { writeNomination } from "@/lib/nomination-store";
+import { COLOGNE_200_BOY_NAMES } from "@/lib/names";
 import type { GoogleVerifyResult } from "@/lib/google-verify";
 import {
   VISUAL_MOCK_EXTERNAL_ENV,
@@ -60,6 +62,30 @@ export async function POST(): Promise<Response> {
       { error: "signin-failed", reason: result.reason, detail: result.detail },
       { status: 500 }
     );
+  }
+  // Feature 013 (mock-mode seeding): the visual suite's signed-in
+  // postcondition is "lands on the vote screen" (011/012 era). Complete
+  // the suite identity's nomination round — every name included, so the
+  // pool is the full 200 and drafting is byte-identical to pre-013. Mock
+  // mode only (the marker guard above); production never reaches here.
+  // The fake store makes these writes free; a failure fails the suite
+  // boot loudly (the signed-in scenarios would hang on the nomination
+  // screen otherwise).
+  // VISUAL_SEED_NOMINATIONS=0 skips the seeding (mock-mode-only switch,
+  // default on): the 013 quickstart walk-through scenarios (V1–V4) need a
+  // FRESH incomplete round for the suite identity; the committed visual
+  // specs never set it.
+  if (process.env["VISUAL_SEED_NOMINATIONS"] !== "0") {
+    try {
+      for (const name of COLOGNE_200_BOY_NAMES) {
+        await writeNomination(result.uid, name, "in");
+      }
+    } catch (err) {
+      return Response.json(
+        { error: "nomination-seed-failed", detail: String(err) },
+        { status: 500 }
+      );
+    }
   }
   return Response.json({ ok: true, label: result.label });
 }

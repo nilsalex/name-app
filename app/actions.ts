@@ -9,6 +9,17 @@ import {
   userSeen,
   bumpUserSeen,
 } from "@/lib/store";
+import {
+  writeNomination,
+  readNominations,
+} from "@/lib/nomination-store";
+import {
+  nextUndecidedName,
+  decidedCount,
+  includedNames,
+  isRoundComplete,
+  type NominationDecision,
+} from "@/lib/nomination-logic";
 import { rankNames } from "@/lib/ranking";
 import type { RankedName } from "@/lib/ranking";
 import {
@@ -49,6 +60,29 @@ export type SignInResult =
       /** Present only when reason comes from token verification. */
       stage?: "aud-mismatch" | "email-unverified" | "email-missing" | "expired" | "fetch-failed" | "token-rejected";
     };
+
+/** Server-derived nomination state for one signed-in user (feature 013). */
+export interface NominationState {
+  /** Decided names → their final decision (hash HGETALL, verbatim). */
+  decisions: Readonly<Record<string, NominationDecision>>;
+  /** Canonical-order first name with no decision yet; null when complete. */
+  nextName: string | null;
+  /** Number of decided names (0–200). */
+  decidedCount: number;
+  /** Names included so far, canonical order (the voting pool so far). */
+  pool: readonly string[];
+  /** true when decidedCount == 200. */
+  complete: boolean;
+}
+
+/**
+ * Refined union (mirroring getWinners): signed-out → { ok: false }.
+ * Upstash failure throws — the gate's try/catch renders the existing
+ * fallback posture (contracts.md getNomination).
+ */
+export type NominationResult =
+  | ({ ok: true } & NominationState)
+  | { ok: false; error: string };
 
 export interface WinnersResult {
   ok: boolean;
@@ -258,5 +292,67 @@ export async function getWinners(): Promise<WinnersResult> {
   } catch (err) {
     console.error("getWinners failed:", err);
     return { ok: false, error: "Rangliste konnte nicht geladen werden." };
+  }
+}
+
+/**
+ * The signed-in user's nomination state (feature 013, contracts.md
+ * getNomination): server-derived per research R1 — everything (next name,
+ * progress, pool, completeness) is derived from ONE hash read; nothing
+ * extra is stored. Signed out → { ok: false }. Upstash failure throws —
+ * the gate's try/catch renders the existing fallback posture.
+ */
+export async function getNomination(): Promise<NominationResult> {
+  try {
+    const uid = await getCurrentUid();
+    if (uid === null) {
+      return { ok: false, error: "Nicht angemeldet." };
+    }
+    const decisions = await readNominations(uid);
+    return {
+      ok: true,
+      decisions,
+      nextName: nextUndecidedName(decisions),
+      decidedCount: decidedCount(decisions),
+      pool: includedNames(decisions),
+      complete: isRoundComplete(decisions),
+    };
+  } catch (err) {
+    // Contracts.md: Upstash failure THROWS (the gate renders its existing
+    // "momentan nicht verfügbar"-style fallback).
+    console.error("getNomination failed:", err);
+    throw err;
+  }
+}
+
+/**
+ * Records ONE include/exclude decision (feature 013, contracts.md
+ * setNomination): validates the name (same isName guard as submitVote) and
+ * the decision union, session check identical to submitVote, then ONE
+ * idempotent HSET (FR-011-safe under retry). Deliberately does NOT
+ * re-check that the name was previously undecided — re-confirmed
+ * same-value writes are harmless and cross-value overwrites cannot
+ * originate from the UI (mirrors submitVote's trust posture, research R5).
+ */
+export async function setNomination(
+  name: unknown,
+  decision: unknown
+): Promise<ActionResult> {
+  try {
+    if (!isName(name)) {
+      return { ok: false, error: "Unbekannter Name." };
+    }
+    if (decision !== "in" && decision !== "out") {
+      return { ok: false, error: "Unbekannte Entscheidung." };
+    }
+    const uid = await getCurrentUid();
+    if (uid === null) {
+      return { ok: false, error: "Abgelaufen — bitte neu anmelden." };
+    }
+    await writeNomination(uid, name, decision);
+    return { ok: true };
+  } catch (err) {
+    console.error("setNomination failed:", err);
+    return { ok: false, error: "Speichern fehlgeschlagen — bitte nochmal versuchen." };
   }
 }

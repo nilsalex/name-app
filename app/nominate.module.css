@@ -1,0 +1,135 @@
+/* Nomination screen styles (feature 013, research R7): one name per screen,
+   large tap targets, counter and hint rows consistent with the existing
+   mobile conventions in page.module.css (features 008–010).
+   No shared-CSS refactor (Principle V) — a standalone CSS Module. */
+
+.nominateArea {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  /* Same horizontal padding posture as page.module.css .voteArea (24px at
+     the tightest 320px width). */
+  padding: 24px;
+  text-align: center;
+}
+
+.heading {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hint {
+  font-size: clamp(13px, 4.6vw, 15px);
+  opacity: 0.7;
+  margin: 0;
+}
+
+/* FR-012: decided/total counter ("37 von 200") — a quiet, small row above
+   the current name, never a percentage. */
+.counter {
+  font-size: clamp(13px, 4.6vw, 15px);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* The one name currently being decided — a single large tap-target card,
+   visually consistent with page.module.css .nameButton geometry. */
+.nameCard {
+  min-height: 96px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  font-size: clamp(26px, 8vw, 36px);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.decisionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 480px;
+}
+
+/* Two large decision buttons ("Aufnehmen" / "Ausschließen") — full-width
+   halves of the row, ≥44px touch floor (008 Q2). */
+.decisionButton {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px;
+  padding: 14px 16px;
+  font-size: clamp(15px, 4.6vw, 17px);
+  font-weight: 600;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.decisionButton:active {
+  opacity: 0.7;
+}
+
+@media (hover: hover) {
+  .decisionButton:hover {
+    opacity: 0.8;
+  }
+}
+
+/* Locked state (FR-008, <2 included names): quiet message in place of the
+   pair area. */
+.locked {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  font-size: clamp(14px, 4.6vw, 16px);
+  opacity: 0.85;
+}
+
+/* Persistent dismissable failed-saves notice — same UX as voting's
+   .notice in page.module.css (feature 003, research R2). */
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid rgba(180, 60, 30, 0.4);
+  border-radius: 10px;
+  max-width: 480px;
+}
+
+.noticeText {
+  font-size: clamp(13px, 4.6vw, 15px);
+  margin: 0;
+}
+
+.noticeDismiss {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: clamp(13px, 4.6vw, 15px);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}

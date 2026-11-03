@@ -13,9 +13,15 @@
 export type VoteInput = { winner: string; loser: string; voter: string };
 export type VoteStatus = "pending" | "sent" | "failed";
 
-export interface VoteSenderOptions {
-  /** Submits one vote; resolves on confirmed recording, rejects on failure. */
-  send: (vote: VoteInput) => Promise<void>;
+/**
+ * Feature 013: the nomination sender reuses the exact same queue/retry
+ * machinery with a per-decision payload instead of a vote payload.
+ */
+export type NominationInput = { name: string; decision: "in" | "out"; voter: string };
+
+export interface VoteSenderOptions<T = VoteInput> {
+  /** Submits one item; resolves on confirmed recording, rejects on failure. */
+  send: (item: T) => Promise<void>;
   /** Total retry window in ms before a vote is marked failed. Default 180_000. */
   retryWindowMs?: number;
   /** Delay between retries in ms. Default 5_000. */
@@ -26,15 +32,15 @@ export interface VoteSenderOptions {
   now?: () => number;
 }
 
-interface TrackedVote {
-  vote: VoteInput;
+interface TrackedItem<T> {
+  item: T;
   status: VoteStatus;
-  /** Epoch ms when the vote's retry window started (first dispatch). */
+  /** Epoch ms when the item's retry window started (first dispatch). */
   windowStart: number;
 }
 
-export function createVoteSender(options: VoteSenderOptions): {
-  cast: (vote: VoteInput) => void;
+export function createVoteSender<T = VoteInput>(options: VoteSenderOptions<T>): {
+  cast: (item: T) => void;
   pendingCount: () => number;
 } {
   const {
@@ -46,7 +52,7 @@ export function createVoteSender(options: VoteSenderOptions): {
   } = options;
 
   // Votes that are queued for (re)dispatch or currently in flight.
-  const queue = new Set<TrackedVote>();
+  const queue = new Set<TrackedItem<T>>();
   // Handle of the scheduled retry pass, if one is pending.
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   // Votes that ended "failed" since the last onFailed flush.
@@ -61,8 +67,8 @@ export function createVoteSender(options: VoteSenderOptions): {
   }
 
   /** Attempt one dispatch. Resolves "sent", "expired", or "retry". */
-  function attempt(tracked: TrackedVote): Promise<"sent" | "expired" | "retry"> {
-    return send(tracked.vote)
+  function attempt(tracked: TrackedItem<T>): Promise<"sent" | "expired" | "retry"> {
+    return send(tracked.item)
       .then((): "sent" => {
         // Terminal success — at-most-once: irrevocably leaves the queue.
         tracked.status = "sent";
@@ -112,9 +118,9 @@ export function createVoteSender(options: VoteSenderOptions): {
     });
   }
 
-  function cast(vote: VoteInput): void {
-    const tracked: TrackedVote = {
-      vote,
+  function cast(item: T): void {
+    const tracked: TrackedItem<T> = {
+      item,
       status: "pending",
       windowStart: now(),
     };

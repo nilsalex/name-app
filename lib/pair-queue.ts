@@ -17,26 +17,30 @@ export const BATCH_SIZE = 5;
 export const REFILL_THRESHOLD = 2;
 
 /**
- * Append up to BATCH_SIZE valid pairs to the reserve (feature 006, US2).
- * Each pair is drawn with pickUnderseenPair(previousPair, seen), chaining
- * BOTH the previous pair AND the accumulated in-batch seen counts through
- * the batch — so consecutive pairs never repeat (feature 001/002 rule,
- * preserved across batch boundaries) and a batch self-balances: a name
+ * Append up to BATCH_SIZE valid pairs to the reserve (feature 006, US2;
+ * feature 013: optional pool threaded to drafting).
+ * Each pair is drawn with pickUnderseenPair(previousPair, seen, pool),
+ * chaining BOTH the previous pair AND the accumulated in-batch seen counts
+ * through the batch — so consecutive pairs never repeat (feature 001/002
+ * rule, preserved across batch boundaries) and a batch self-balances: a name
  * drafted once in this batch counts as seen for the remaining draws
  * (contracts.md). The caller persists the accumulated exposure via the
  * refill-time seen bump (research R4 single-writer rule).
+ * CONTRACT BOUNDARY (FR-008): the caller guarantees pool.length >= 2 when
+ * providing a pool — a degenerate one-name pool cannot produce pairs.
  * Returns a new array; does not mutate the input.
  */
 export function refillReserve(
   reserve: readonly Pair[],
   seen: Readonly<Record<string, number>> | undefined,
-  lastPair: Pair | undefined
+  lastPair: Pair | undefined,
+  pool?: readonly string[]
 ): Pair[] {
   const next = [...reserve];
   let previous: Pair | undefined = lastPair;
   const seenAcc: Record<string, number> = seen ? { ...seen } : {};
   for (let i = 0; i < BATCH_SIZE; i++) {
-    previous = pickUnderseenPair(previous, seenAcc);
+    previous = pickUnderseenPair(previous, seenAcc, pool);
     next.push(previous);
     // Accumulate in-batch exposure so the batch self-balances.
     seenAcc[previous[0]] = (seenAcc[previous[0]] ?? 0) + 1;

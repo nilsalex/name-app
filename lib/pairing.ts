@@ -20,13 +20,22 @@ export type Pair = [string, string];
 /**
  * Picks one name: probability proportional to weight = score + 1.
  * Cumulative (prefix-sum) draw over the fixed name list — O(n), n = 200.
+ * Feature 013: optional `pool` — when provided, the prefix-sum iterates
+ * `pool` instead of the full 200 (weight semantics unchanged; missing
+ * pool = full list, zero drift). CONTRACT BOUNDARY (FR-008): the caller
+ * guarantees pool.length >= 2 — a degenerate one-name pool cannot produce
+ * a distinct pair.
  */
-function weightedPick(scores: Readonly<Record<string, number>>): string {
+function weightedPick(
+  scores: Readonly<Record<string, number>>,
+  pool?: readonly string[]
+): string {
+  const list = pool ?? COLOGNE_200_BOY_NAMES;
   // Build prefix sums of weights.
   let total = 0;
-  const prefix = new Array<number>(COLOGNE_200_BOY_NAMES.length);
-  for (let i = 0; i < COLOGNE_200_BOY_NAMES.length; i++) {
-    const name = COLOGNE_200_BOY_NAMES[i];
+  const prefix = new Array<number>(list.length);
+  for (let i = 0; i < list.length; i++) {
+    const name = list[i];
     total += (scores[name] ?? 0) + 1;
     prefix[i] = total;
   }
@@ -34,10 +43,10 @@ function weightedPick(scores: Readonly<Record<string, number>>): string {
   // Random point in [0, total); first index whose cumulative weight covers it.
   const r = Math.random() * total;
   for (let i = 0; i < prefix.length; i++) {
-    if (r < prefix[i]) return COLOGNE_200_BOY_NAMES[i];
+    if (r < prefix[i]) return list[i];
   }
   // Floating-point safety net: should be unreachable.
-  return COLOGNE_200_BOY_NAMES[COLOGNE_200_BOY_NAMES.length - 1];
+  return list[list.length - 1];
 }
 
 /**
@@ -49,16 +58,22 @@ function weightedPick(scores: Readonly<Record<string, number>>): string {
  * would bias the first slot's distribution by p_i(1-p_i) — heavy names lose
  * disproportionate mass because self-pair probability grows with p² — and
  * break the exact weight proportionality required by FR-002.
+ *
+ * Feature 013: optional `pool` (symmetry with pickUnderseenPair — required
+ * to keep refillReserve's chaining consistent). When provided, drafting
+ * iterates `pool`; undefined/missing pool = full canonical list (zero
+ * drift). CONTRACT BOUNDARY (FR-008): the caller guarantees pool.length
+ * >= 2.
  */
 export function nextPair(
   previousPair?: Pair,
-  scores?: Readonly<Record<string, number>>
+  scores?: Readonly<Record<string, number>>,
+  pool?: readonly string[]
 ): Pair {
-  const pick = scores ? () => weightedPick(scores) : () => {
-    return COLOGNE_200_BOY_NAMES[
-      Math.floor(Math.random() * COLOGNE_200_BOY_NAMES.length)
-    ];
-  };
+  const list = pool ?? COLOGNE_200_BOY_NAMES;
+  const pick = scores
+    ? () => weightedPick(scores, list)
+    : () => list[Math.floor(Math.random() * list.length)];
 
   for (;;) {
     const a = pick();
@@ -83,19 +98,23 @@ export function nextPair(
  * weight (no +1 base — unlike weightedPick, which implements feature 002's
  * score+1 curve). Prefix-sum draw, O(n), n = 200.
  */
-function rawWeightedPick(weights: Readonly<Record<string, number>>): string {
+function rawWeightedPick(
+  weights: Readonly<Record<string, number>>,
+  pool?: readonly string[]
+): string {
+  const list = pool ?? COLOGNE_200_BOY_NAMES;
   let total = 0;
-  const prefix = new Array<number>(COLOGNE_200_BOY_NAMES.length);
-  for (let i = 0; i < COLOGNE_200_BOY_NAMES.length; i++) {
-    const name = COLOGNE_200_BOY_NAMES[i];
+  const prefix = new Array<number>(list.length);
+  for (let i = 0; i < list.length; i++) {
+    const name = list[i];
     total += weights[name] ?? 1;
     prefix[i] = total;
   }
   const r = Math.random() * total;
   for (let i = 0; i < prefix.length; i++) {
-    if (r < prefix[i]) return COLOGNE_200_BOY_NAMES[i];
+    if (r < prefix[i]) return list[i];
   }
-  return COLOGNE_200_BOY_NAMES[COLOGNE_200_BOY_NAMES.length - 1];
+  return list[list.length - 1];
 }
 
 /**
@@ -106,6 +125,14 @@ function rawWeightedPick(weights: Readonly<Record<string, number>>): string {
  * user's exposure converges toward uniform (SC-003). Win scores are
  * deliberately NOT an input: a name voted up ten times should NOT keep
  * reappearing — only its exposure counts.
+ *
+ * Feature 013 (pool-constrained drafting, research R4): when `pool` is
+ * provided, the weighted pool iterates `pool` instead of the full 200 —
+ * weight semantics 1/(1+seen) UNCHANGED within the pool; missing/empty/
+ * undefined pool = full canonical list (zero drift for existing callers).
+ * CONTRACT BOUNDARY (FR-008): the caller guarantees pool.length >= 2 — a
+ * degenerate one-name pool cannot produce a distinct pair; the loop
+ * termination guarantee (every name keeps weight > 0) presumes that guard.
  *
  * Missing/empty seen map degenerates to uniform selection (INV-6 —
  * statistically identical to feature 001's uniform mode).
@@ -120,20 +147,20 @@ function rawWeightedPick(weights: Readonly<Record<string, number>>): string {
  */
 export function pickUnderseenPair(
   previousPair?: Pair,
-  seen?: Readonly<Record<string, number>>
+  seen?: Readonly<Record<string, number>>,
+  pool?: readonly string[]
 ): Pair {
+  const list = pool ?? COLOGNE_200_BOY_NAMES;
   const weights: Record<string, number> = {};
   if (seen) {
-    for (const name of COLOGNE_200_BOY_NAMES) {
+    for (const name of list) {
       const k = seen[name] ?? 0;
       weights[name] = 1 / (1 + k);
     }
   }
-  const pick = seen ? () => rawWeightedPick(weights) : () => {
-    return COLOGNE_200_BOY_NAMES[
-      Math.floor(Math.random() * COLOGNE_200_BOY_NAMES.length)
-    ];
-  };
+  const pick = seen
+    ? () => rawWeightedPick(weights, list)
+    : () => list[Math.floor(Math.random() * list.length)];
 
   for (;;) {
     const a = pick();
